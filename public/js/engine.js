@@ -245,11 +245,6 @@ export function refLabel(s, ref) {
   return t ? t.name : "Tile removed";
 }
 
-export function describeStep(s, macro, step) {
-  const v = typeof step.value === "number" ? String(step.value) : refLabel(s, step.value);
-  return `${refLabel(s, step.target)} ${OP_GLYPH[step.op]} ${v}`;
-}
-
 /** Rename a variable and every step reference to it. */
 export function renameVar(macro, from, to) {
   const fix = (r) => (r && r.kind === "var" && r.name === from ? { kind: "var", name: to } : r);

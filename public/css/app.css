@@ -428,7 +428,7 @@ h1, h2, p { margin: 0; }
 .steps-head .muted { white-space: nowrap; font-size: 12px; }
 .steps-head .field-label { white-space: nowrap; }
 .steps { list-style: none; margin: 0; padding: 0; }
-.step-row { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 8px 6px 6px 4px; margin-bottom: 8px; }
+.step-row { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 6px 6px 6px 4px; margin-bottom: 8px; }
 .step-row.dragging { z-index: 5; box-shadow: 0 12px 30px rgba(0, 0, 0, .6); border-color: var(--teal); }
 .step-row.is-broken { border-color: rgba(229, 72, 77, .5); }
 .step-grid { display: grid; grid-template-columns: 26px minmax(0, 1fr) 52px minmax(0, 1fr) 44px; gap: 5px; align-items: center; }
@@ -452,8 +452,6 @@ h1, h2, p { margin: 0; }
 .val-chev { position: relative; width: 28px; height: 42px; display: grid; place-items: center; color: var(--muted); flex: none; border-left: 1px solid var(--line); }
 .valbox-ref.is-tile .sel-label { color: var(--text); }
 .step-del { width: 44px; height: 44px; display: grid; place-items: center; color: var(--muted); border-radius: 12px; }
-.step-preview { font-size: 12.5px; color: var(--muted); padding: 5px 0 1px 32px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.step-preview.broken { color: var(--red-text); }
 .key-box { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin: 18px 0 8px; }
 .key-title { font-weight: 680; color: var(--muted); font-size: 14px; margin-bottom: 8px; }
 .key-ops { display: flex; flex-wrap: wrap; gap: 6px 14px; font-weight: 680; font-size: 15px; margin-bottom: 8px; }

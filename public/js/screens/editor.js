@@ -261,7 +261,6 @@ export function MacroEditor({ id, macroId, nav }) {
                   <${ValueBox} s=${s} macro=${m} step=${st} onChange=${(value) => setStep(i, { value })} />
                   <button class="step-del" aria-label=${`Delete step ${i + 1}`} onClick=${() => delStep(i)}><${Icon} name="x" size=${20} /></button>
                 </div>
-                <div class=${"step-preview" + (broken ? " broken" : "")}>${broken ? "Tile removed — this step is skipped when the macro runs" : E.describeStep(s, m, st)}</div>
               </li>`;
           })}
         </ol>
