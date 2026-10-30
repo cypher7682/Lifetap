@@ -2,7 +2,7 @@ import { html, useState, useEffect, useRef } from "../../vendor/preact-htm.js";
 import * as store from "../store.js";
 import * as E from "../engine.js";
 import { Icon } from "../icons.js";
-import { usePress, Sheet, Popover, MenuItem, Segmented, IntInput, dialog, confirm, snack, toast } from "../ui.js";
+import { usePress, Sheet, Popover, MenuItem, Segmented, IntInput, dialog, confirm, snack, toast, splash } from "../ui.js";
 import { IconPicker, ColorPicker, GridPicker } from "./pickers.js";
 
 // Edit mode survives a trip to the step editor and back.
@@ -112,6 +112,7 @@ function HowMany({ kind, tile, macro, dir, turn, onDone, onClose }) {
     setN((x) => Math.max(floor, x + d));
   };
   const preview = tile ? tile.value + dir * n : 0;
+  const tooFar = !isMacro && preview < 0 && !tile.allowNegative;
   const title = isMacro ? `Run ${macro.name}` : `${dir > 0 ? "Add to" : "Take from"} ${tile.name}`;
   const cls = isMacro ? (touched ? "hm-macro on" : "hm-macro") : dir > 0 ? "hm-add" : "hm-take";
   return html`
@@ -122,7 +123,7 @@ function HowMany({ kind, tile, macro, dir, turn, onDone, onClose }) {
           <div class="hm-title">${title}</div>
           <div class="hm-sub">${isMacro
             ? `${macro.steps.length} step${macro.steps.length === 1 ? "" : "s"} each run`
-            : html`${fmt(tile.value)} → <b class=${dir > 0 ? "t-teal" : "t-red"}>${fmt(preview)}</b>`}</div>
+            : html`${fmt(tile.value)} → <b class=${dir > 0 ? "t-teal" : "t-red"}>${fmt(preview)}</b>${tooFar ? " · can't go below 0" : ""}`}</div>
         </div>
       </div>
       <div class=${"hm-big " + cls} aria-live="polite">${isMacro ? "×" + n : (dir > 0 ? "+" : "−") + n}</div>
@@ -135,7 +136,7 @@ function HowMany({ kind, tile, macro, dir, turn, onDone, onClose }) {
       </div>
       <div class="hm-actions">
         <button class="btn btn-cancel" aria-label="Cancel" onClick=${onClose}><${Icon} name="x" /></button>
-        <button class=${"btn btn-block " + (isMacro ? "btn-green" : "btn-primary")} disabled=${n < Math.max(1, floor)} onClick=${() => onDone(n)}>
+        <button class=${"btn btn-block " + (isMacro ? "btn-green" : "btn-primary")} disabled=${n < Math.max(1, floor) || tooFar} onClick=${() => onDone(n)}>
           <${Icon} name="check" size=${22} />
           ${isMacro ? (n === 1 ? "Run once" : `Run ×${n}`) : `${dir > 0 ? "Add" : "Take"} ${n}`}
         </button>
@@ -166,6 +167,11 @@ function EditTileSheet({ dash, index, onClose, onRemove, onGrid }) {
           </div>
         </div>
       </div>
+      <label class="check-row">
+        <input type="checkbox" checked=${!!tile.allowNegative} onChange=${(e) => set({ allowNegative: e.currentTarget.checked })} />
+        <span class="check-box" aria-hidden="true"><${Icon} name="check" size=${18} /></span>
+        <span><b>Allow negative</b><span class="muted small">Off: anything that would take this below 0 is rejected.</span></span>
+      </label>
       <div class="field-label">Icon</div>
       <${IconPicker} value=${tile.icon} color=${tile.color} onChange=${(icon) => set({ icon })} />
       <div class="field-label">Colour</div>
@@ -294,13 +300,18 @@ export function DashScreen({ id, nav, autoTurn }) {
     if (recRef.current) setRec((r) => ({ ...r, taps: r.taps + 1 }));
   };
 
-  const step = (tile, delta) => commit(E.tapEvent(tile, delta));
+  const step = (tile, delta) => {
+    const blocked = E.tapBlocked(tile, delta);
+    if (blocked) return splash(E.blockedMessage(blocked));
+    commit(E.tapEvent(tile, delta));
+  };
 
   const runMacro = (macroId, times = 1) => {
     const s = E.view(store.get(id));
     const m = E.findMacro(s, macroId);
     if (!m) return;
     const r = E.macroEvent(s, m, times);
+    if (r.blocked) return splash(E.blockedMessage(r.blocked));
     commit(r.event);
     const warn = [];
     if (r.skippedBroken) warn.push(`skipped ${r.skippedBroken} broken step${r.skippedBroken === 1 ? "" : "s"}`);
@@ -559,7 +570,7 @@ export function DashScreen({ id, nav, autoTurn }) {
       if (sheet.kind === "tile") {
         const tile = E.findTile(v, sheet.tileId);
         if (tile) sheetEl = html`<${HowMany} kind="tile" tile=${tile} dir=${sheet.dir} turn=${turn} onClose=${close}
-          onDone=${(n) => { close(); commit(E.tapEvent(E.findTile(E.view(store.get(id)), tile.id), sheet.dir * n)); }} />`;
+          onDone=${(n) => { close(); step(E.findTile(E.view(store.get(id)), tile.id), sheet.dir * n); }} />`;
       } else {
         const m = E.findMacro(v, sheet.macroId);
         if (m) sheetEl = html`<${HowMany} kind="macro" macro=${m} turn=${turn} onClose=${close} onDone=${(n) => { close(); runMacro(m.id, n); }} />`;

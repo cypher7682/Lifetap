@@ -80,6 +80,7 @@ export function newCounter(i, overrides = {}) {
     icon: ICONS[i % 9],
     color: COLORS[i % COLORS.length],
     start: 0,
+    allowNegative: false,
     value: 0,
     ...overrides,
   };
@@ -270,11 +271,17 @@ function applyOp(cur, op, v) {
 
 /**
  * Run a macro `times` times against the structure's current values.
- * Returns { changes: [{tileId, from, to}], skippedBroken, divByZero }.
+ * Returns { changes: [{tileId, from, to}], skippedBroken, divByZero, blocked }.
+ * If any step would take a tile that doesn't allow negatives below zero, the
+ * whole run is rejected: changes is empty and blocked = { tileId, name, value }.
  */
 export function runMacro(s, macro, times = 1) {
   const values = new Map();
-  for (const t of counters(s)) values.set(t.id, t.value);
+  const noNeg = new Map();
+  for (const t of counters(s)) {
+    values.set(t.id, t.value);
+    if (!t.allowNegative) noNeg.set(t.id, t.name);
+  }
   const before = new Map(values);
   let skippedBroken = 0;
   let divByZero = false;
@@ -296,7 +303,12 @@ export function runMacro(s, macro, times = 1) {
         divByZero = true;
         continue;
       }
-      write(step.target, applyOp(read(step.target), step.op, v));
+      const next = applyOp(read(step.target), step.op, v);
+      if (step.target.kind === "tile" && next < 0 && noNeg.has(step.target.tileId)) {
+        const blocked = { tileId: step.target.tileId, name: noNeg.get(step.target.tileId), value: next };
+        return { changes: [], skippedBroken, divByZero, blocked };
+      }
+      write(step.target, next);
     }
   }
 
@@ -305,7 +317,17 @@ export function runMacro(s, macro, times = 1) {
     const to = values.get(id);
     if (to !== from) changes.push({ tileId: id, from, to });
   }
-  return { changes, skippedBroken, divByZero };
+  return { changes, skippedBroken, divByZero, blocked: null };
+}
+
+/** For a direct +/− on a tile: the blocked info if it would go below zero, else null. */
+export function tapBlocked(tile, delta) {
+  const to = tile.value + delta;
+  return to < 0 && !tile.allowNegative ? { tileId: tile.id, name: tile.name, value: to } : null;
+}
+
+export function blockedMessage(b) {
+  return `Would take ${b.name} to −${Math.abs(b.value)}. Couldn't execute.`;
 }
 
 /** Steps captured by a recording: one +/− per tile with a non-zero net change. */

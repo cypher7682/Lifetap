@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as E from "../public/js/engine.js";
 
-const T = (id, value, name = id) => ({ kind: "counter", id, name, icon: "heart", color: "teal", start: 0, value });
+const T = (id, value, name = id, allowNegative = true) => ({ kind: "counter", id, name, icon: "heart", color: "teal", start: 0, value, allowNegative });
 const tile = (id) => ({ kind: "tile", tileId: id });
 const v = (name) => ({ kind: "var", name });
 
@@ -182,4 +182,31 @@ test("renameVar updates refs; toInt", () => {
   assert.equal(E.toInt("−12"), -12);
   assert.equal(E.toInt("abc", 3), 3);
   assert.equal(E.toInt("4.5", 0), 0);
+});
+
+test("tiles that don't allow negatives reject the whole macro", () => {
+  const s = { cells: [T("mana", 3, "Mana", false), T("elves", 1, "Elves")], macros: [] };
+  const mac = { vars: [], steps: [
+    { target: tile("elves"), op: "+", value: 5 },
+    { target: tile("mana"), op: "-", value: 5 },
+    { target: tile("mana"), op: "+", value: 10 },
+  ] };
+  const r = E.runMacro(s, mac);
+  assert.deepEqual(r.changes, []);
+  assert.deepEqual(r.blocked, { tileId: "mana", name: "Mana", value: -2 });
+  assert.equal(E.blockedMessage(r.blocked), "Would take Mana to −2. Couldn't execute.");
+  // repeats: blocked on the run that would go negative
+  const pay = { vars: [], steps: [{ target: tile("mana"), op: "-", value: 1 }] };
+  assert.equal(E.runMacro(s, pay, 3).changes[0].to, 0);
+  assert.equal(E.runMacro(s, pay, 4).blocked.value, -1);
+  // variables and negative-allowed tiles can go below zero freely
+  const ok = { vars: [{ name: "x", initial: 0 }], steps: [{ target: v("x"), op: "-", value: 9 }, { target: tile("elves"), op: "-", value: 9 }] };
+  assert.equal(E.runMacro(s, ok).blocked, null);
+});
+
+test("tapBlocked", () => {
+  assert.equal(E.tapBlocked(T("a", 0, "A", false), -1).value, -1);
+  assert.equal(E.tapBlocked(T("a", 0, "A", false), 1), null);
+  assert.equal(E.tapBlocked(T("a", 0, "A", true), -1), null);
+  assert.equal(E.newCounter(0).allowNegative, false);
 });

@@ -5,10 +5,11 @@ export const LONG_PRESS_MS = 450;
 
 // ---------------------------------------------------------------- global overlays
 
-const overlay = { dialog: null, snack: null };
+const overlay = { dialog: null, snack: null, splash: null };
 const overlayListeners = new Set();
 const emitOverlay = () => overlayListeners.forEach((l) => l());
 let snackTimer = null;
+let splashTimer = null;
 
 /** Promise-based dialog. buttons: [{label, value, kind: "primary"|"danger"|"plain"}] */
 export function dialog({ title, body, buttons }) {
@@ -40,6 +41,15 @@ export function snack(text, action = null, onAction = null) {
 }
 export const toast = (text) => snack(text);
 
+/** Brief centred error splash, e.g. a macro rejected for going negative. */
+export function splash(text) {
+  clearTimeout(splashTimer);
+  overlay.splash = { text, key: Math.random() };
+  emitOverlay();
+  haptic();
+  splashTimer = setTimeout(() => { overlay.splash = null; emitOverlay(); }, 2600);
+}
+
 function useOverlay() {
   const [, set] = useState(0);
   useEffect(() => {
@@ -63,6 +73,11 @@ export function Overlays() {
               <button class=${"btn btn-" + (b.kind || "plain")} onClick=${() => o.dialog.resolve(b.value)}>${b.label}</button>`)}
           </div>
         </div>
+      </div>`}
+    ${o.splash && html`
+      <div class="splash" key=${o.splash.key} role="alert" onClick=${() => { overlay.splash = null; emitOverlay(); }}>
+        <span class="splash-icon" aria-hidden="true">!</span>
+        <span>${o.splash.text}</span>
       </div>`}
     ${o.snack && html`
       <div class="snack" key=${o.snack.key} role="status">

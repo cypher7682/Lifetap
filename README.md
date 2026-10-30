@@ -34,4 +34,5 @@ After a deploy, an installed copy picks up the new version the next time it's op
 - Delta badges also appear when a macro changes a tile, not only on +/− taps, so you can see what a macro did.
 - Horizontal view: automatic when the OS rotates to landscape on a touch device; manual setting in edit mode for rotation-locked phones.
 - Re-recording an existing macro asks for confirmation first, then replaces its steps when you tap Stop.
+- Tiles have an "Allow negative" setting (off by default). Any tap, take or macro step that would take a non-negative tile below 0 rejects the whole action with a splash; checked per step, so step order matters.
 - Steps whose tile or variable has been removed are shown in red and skipped at run time, with a one-line warning.
