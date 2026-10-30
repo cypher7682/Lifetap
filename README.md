@@ -32,6 +32,8 @@ After a deploy, an installed copy picks up the new version the next time it's op
 
 - Undo history keeps 10,000 events per dash (effectively unlimited). Reset / New game clears it, as specified.
 - Delta badges also appear when a macro changes a tile, not only on +/− taps, so you can see what a macro did.
+- Added a 3×4 layout (up to 12 counters; best fit for 10–12). 3-column grids use 8px gaps so −/+ stay ≥ 44px at 360px wide.
+- Reset / New game lives in the menu under the dash title (marked with ▾).
 - Horizontal view: automatic when the OS rotates to landscape on a touch device; manual setting in edit mode for rotation-locked phones.
 - Re-recording an existing macro asks for confirmation first, then replaces its steps when you tap Stop.
 - Tiles have an "Allow negative" setting (off by default). Any tap, take or macro step that would take a non-negative tile below 0 rejects the whole action with a splash; checked per step, so step order matters.

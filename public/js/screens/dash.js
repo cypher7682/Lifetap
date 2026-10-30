@@ -544,7 +544,8 @@ export function DashScreen({ id, nav, autoTurn }) {
     : html`
       <header class="dash-head">
         <button class="icon-btn" aria-label="Back to dashes" onClick=${() => nav.back()}><${Icon} name="back" class="hrot" style=${turn ? { transform: `rotate(${turn}deg)` } : null} /></button>
-        <button class="head-title title-btn" aria-label=${`${dash.name}. Menu`} onClick=${(e) => setSheet({ type: "title", anchor: e.currentTarget })}>${dash.name}</button>
+        <button class="head-title title-btn" aria-label=${`${dash.name}. Menu: reset or new game`} onClick=${(e) => setSheet({ type: "title", anchor: e.currentTarget })}>
+          <span class="title-text">${dash.name}</span><${Icon} name="chevdown" size=${18} class="title-chev" /></button>
         <button class="icon-btn round" aria-label=${dash.log.length ? `Undo ${dash.log[dash.log.length - 1].label}` : "Nothing to undo"} disabled=${!dash.log.length} onClick=${doUndo}>
           <${Icon} name="undo" size=${22} style=${turn ? { transform: `rotate(${turn}deg)` } : null} /></button>
         <button class="icon-btn round" aria-label=${dash.redo.length ? `Redo ${dash.redo[dash.redo.length - 1].label}` : "Nothing to redo"} disabled=${!dash.redo.length} onClick=${doRedo}>

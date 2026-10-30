@@ -129,7 +129,9 @@ h1, h2, p { margin: 0; }
 .dash-head { display: flex; align-items: center; gap: 5px; padding: 10px 10px 10px 2px; min-height: 66px; flex: none; }
 .dash-head > .icon-btn:first-child { width: 38px; }
 .dash-head .btn-save { padding: 0 11px 0 9px; gap: 4px; }
-.title-btn { text-align: left; padding: 8px 2px; border-radius: 10px; font-size: 21px; }
+.title-btn { text-align: left; padding: 8px 2px; border-radius: 10px; font-size: 21px; display: flex; align-items: center; gap: 2px; }
+.title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.title-chev { color: var(--muted); margin-top: 2px; }
 .edit-head { padding-left: 16px; gap: 8px; }
 .edit-titles { flex: 1; min-width: 0; }
 .rec-head { padding-left: 16px; gap: 12px; }
@@ -179,7 +181,7 @@ h1, h2, p { margin: 0; }
 .step-btn:disabled { opacity: .35; }
 .stepper-val { flex: 1; text-align: center; font-size: 56px; font-weight: 680; font-variant-numeric: tabular-nums; }
 
-.grid-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.grid-picker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .grid-opt {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; padding: 12px 4px 10px;
@@ -187,11 +189,11 @@ h1, h2, p { margin: 0; }
 .grid-opt.on { border: 2px solid var(--teal); background: rgba(63, 183, 189, .12); }
 .grid-opt:disabled { opacity: .32; }
 .grid-opt.small { opacity: .55; }
-.grid-mini { display: grid; gap: 3px; width: 48px; height: 58px; }
+.grid-mini { display: grid; gap: 3px; width: 40px; height: 54px; }
 .grid-mini span { background: #2f333c; border-radius: 4px; }
 .grid-mini span.used { background: #6b707b; }
 .grid-opt.on .grid-mini span.used { background: var(--teal); }
-.grid-name { font-weight: 680; font-size: 16px; }
+.grid-name { font-weight: 680; font-size: 15px; white-space: nowrap; }
 .grid-note { font-size: 11px; color: var(--muted); font-weight: 540; letter-spacing: .02em; }
 .grid-opt.on .grid-note { color: var(--teal); }
 
@@ -325,6 +327,7 @@ h1, h2, p { margin: 0; }
 .edit-grid { padding: 0; grid-auto-rows: 104px; }
 .edit-grid.g-3x3 { grid-auto-rows: 92px; }
 .edit-grid.g-2x4 { grid-auto-rows: 84px; }
+.edit-grid.g-3x4 { grid-auto-rows: 80px; }
 .edit-tile {
   border: 1.5px dashed var(--line-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   padding: 8px; container-type: normal;
@@ -505,3 +508,23 @@ h1, h2, p { margin: 0; }
   88% { opacity: 1; }
   100% { opacity: 0; transform: translate(-50%, -50%); }
 }
+
+/* short compact tiles (3x4, small phones): icon inline with the name, tighter spacing */
+@container (max-height: 150px) {
+  .lay-compact .tile-head { flex-direction: row; justify-content: center; gap: 4px; }
+  .lay-compact .tile-head .ic { width: 15px; height: 15px; }
+  .lay-compact .tile-name { font-size: 12px; }
+  .lay-compact .tile-body { gap: 4px; grid-template-rows: 1fr 44px; }
+  .lay-compact .tile-val { font-size: min(44cqh, calc(88cqw / (var(--len) * .62)), 40px); }
+  .macro-tile .tile-head { flex-direction: row; justify-content: center; gap: 4px; }
+  .macro-tile .tile-head .ic { width: 15px; height: 15px; }
+  .macro-tile .tile-name { font-size: 12.5px; }
+  .macro-tile-foot { display: none; }
+  /* the head is one line here, so the badge sits beside the number instead */
+  .lay-compact .badge { top: 28px; right: 4px; }
+}
+
+/* 3-column grids: tighter gaps so −/+ stay ≥ 44px wide even at 360px */
+.play-grid.g-3x3, .play-grid.g-3x4 { --gap: 8px; }
+.lay-compact .tc { padding: 8px 4px 4px; }
+.lay-compact .tile-body { gap: 4px; }

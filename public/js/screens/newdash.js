@@ -12,7 +12,7 @@ export function NewDash({ nav }) {
   const err = tried && !name.trim();
 
   const setN = (n) => {
-    n = Math.max(1, Math.min(9, n));
+    n = Math.max(1, Math.min(12, n));
     setCount(n);
     setGrid(E.bestGrid(n));
   };
@@ -46,7 +46,7 @@ export function NewDash({ nav }) {
         <div class="stepper">
           <button class="step-btn" aria-label="Fewer counters" disabled=${count <= 1} onClick=${() => setN(count - 1)}><${Icon} name="minus" size=${28} /></button>
           <span class="stepper-val" aria-live="polite">${count}</span>
-          <button class="step-btn" aria-label="More counters" disabled=${count >= 9} onClick=${() => setN(count + 1)}><${Icon} name="plus" size=${28} /></button>
+          <button class="step-btn" aria-label="More counters" disabled=${count >= 12} onClick=${() => setN(count + 1)}><${Icon} name="plus" size=${28} /></button>
         </div>
 
         <div class="field-label">Layout</div>

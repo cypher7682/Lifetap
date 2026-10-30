@@ -26,7 +26,7 @@ function altarDash() {
 }
 
 test("bestGrid", () => {
-  assert.deepEqual([1, 4, 5, 6, 7, 8, 9].map((n) => E.gridKey(E.bestGrid(n))), ["2x2", "2x2", "2x3", "2x3", "2x4", "2x4", "3x3"]);
+  assert.deepEqual([1, 4, 5, 6, 7, 8, 9, 10, 12].map((n) => E.gridKey(E.bestGrid(n))), ["2x2", "2x2", "2x3", "2x3", "2x4", "2x4", "3x3", "3x4", "3x4"]);
 });
 
 test("createDash", () => {
@@ -36,6 +36,9 @@ test("createDash", () => {
   assert.equal(d.cells[0].name, "Counter 1");
   assert.equal(d.bar.length, 4);
   assert.throws(() => E.createDash({ name: "X", count: 5, grid: { cols: 2, rows: 2 } }));
+  const big = E.createDash({ name: "Big", count: 12, grid: { cols: 3, rows: 4 } });
+  assert.equal(E.counters(big).length, 12);
+  assert.equal(new Set(big.cells.map((c) => c.id)).size, 12);
 });
 
 test("spec §6.3 Altar sac example", () => {

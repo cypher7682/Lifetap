@@ -8,6 +8,7 @@ export const GRIDS = [
   { cols: 2, rows: 3 },
   { cols: 2, rows: 4 },
   { cols: 3, rows: 3 },
+  { cols: 3, rows: 4 },
 ];
 export const OPS = ["+", "-", "*", "/", "="];
 export const OP_GLYPH = { "+": "+", "-": "−", "*": "×", "/": "÷", "=": "=" };
@@ -30,7 +31,8 @@ export function bestGrid(n) {
   if (n <= 4) return GRIDS[0];
   if (n <= 6) return GRIDS[1];
   if (n <= 8) return GRIDS[2];
-  return GRIDS[3];
+  if (n <= 9) return GRIDS[3];
+  return GRIDS[4];
 }
 
 export function toInt(v, fallback = 0) {
