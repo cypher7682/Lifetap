@@ -43,4 +43,5 @@ After a deploy, an installed copy picks up the new version the next time it's op
 - Dash variables (`@name`) belong to the whole dash and keep their value between macro runs (macro `$vars` reset every run). Reset / New game returns them to their starting value.
 - Toggle boxes hold one or two on/off switches; macros read them as 1/0 and setting one to anything non-zero turns it on. Recording captures a flipped switch as an `=` step.
 - Vars boxes show up to 4 dash variables. Display only; macros change the values.
+- Counter triggers ("when it goes down / up / changes") run a step list with a built-in `$change` (or once per point). They fire immediately, mid-step, depth-first, so a macro's later steps see their effects. A trigger that would take a no-negatives tile below 0 is rolled back on its own; the action carries on. More than 500 trigger runs in one action = "Forced draw?" splash and nothing changes. A tap or macro plus all its triggers is one undo. Recordings only capture direct taps.
 - Steps whose tile or variable has been removed are shown in red and skipped at run time, with a one-line warning.

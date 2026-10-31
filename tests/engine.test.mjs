@@ -150,10 +150,9 @@ test("macro tile removal deletes macro unless on bar; deleteMacro clears everywh
   assert.equal(del.cells[idx], null);
 });
 
-test("recordingSteps captures net literal deltas", () => {
+test("recordingSteps captures only direct taps", () => {
   const d = altarDash();
-  const start = { mana: 5, nad: 12, elves: 9, milled: 34, casts: 0, held: 0 };
-  const steps = E.recordingSteps(d, start);
+  const steps = E.recordingSteps(d, { mana: 2, elves: -4, nad: 0 });
   assert.deepEqual(steps, [
     { target: tile("mana"), op: "+", value: 2 },
     { target: tile("elves"), op: "-", value: 4 },
@@ -286,8 +285,8 @@ test("toggleEvent, reset, delete var, duplicate", () => {
 test("recording captures toggle flips as = steps", () => {
   const d = cmdrDash();
   const start = Object.fromEntries(E.holderValues(d));
-  const after = E.commitEvent(d, E.toggleEvent(E.findToggle(d, "out")));
-  assert.deepEqual(E.recordingSteps(after, start), [{ target: { kind: "toggle", toggleId: "out" }, op: "=", value: 1 }]);
+  assert.deepEqual(E.recordingSteps(d, {}, { out: 1 }, start), [{ target: { kind: "toggle", toggleId: "out" }, op: "=", value: 1 }]);
+  assert.deepEqual(E.recordingSteps(d, {}, { out: 0 }, start), []); // flipped back
 });
 
 test("draft vars: new var lives in draft, values write through", () => {
@@ -323,4 +322,69 @@ test("moveSlot: swap cells, move into empties, macros between grid and bar", () 
   // bar -> empty cell, bar -> bar
   assert.equal(E.moveSlot(s, slot(0), cell(2)).cells[2].macroId, "m1");
   assert.deepEqual(E.moveSlot(s, slot(0), slot(3)).bar, [null, null, null, "m1"]);
+});
+
+// ---------------------------------------------------------------- triggers
+
+function triggerDash() {
+  // Treasure: whenever it goes down, Cmdr + $change.  Elves: whenever it goes down, Cmdr + 1 per point.
+  const mk = (id, name, value, triggers) => ({ kind: "counter", id, name, icon: "heart", color: "teal", start: 0, value, allowNegative: false, triggers });
+  const cmdrPlus = (value) => ({ target: tile("cmdr"), op: "+", value });
+  const cells = [
+    mk("treasure", "Treasure", 3, [{ id: "t1", when: "down", perPoint: false, vars: [], steps: [cmdrPlus({ kind: "var", name: "change" })] }]),
+    mk("elves", "Elves", 4, [{ id: "t2", when: "down", perPoint: true, vars: [], steps: [cmdrPlus(1)] }]),
+    mk("cmdr", "Cmdr", 2, []),
+    mk("held", "Held", 0, []),
+  ];
+  return { ...E.createDash({ name: "T", count: 1, grid: { cols: 2, rows: 2 } }), cells };
+}
+
+test("triggers fire mid-macro, before the next step", () => {
+  const d = triggerDash();
+  // sac 2 treasure, then sacrifice the commander and hold its counters
+  const mac = { vars: [], steps: [
+    { target: tile("treasure"), op: "-", value: 2 },
+    { target: tile("held"), op: "+", value: tile("cmdr") },
+    { target: tile("cmdr"), op: "=", value: 0 },
+  ] };
+  const ch = Object.fromEntries(E.runMacro(d, mac).changes.map((c) => [c.tileId, c.to]));
+  assert.deepEqual(ch, { treasure: 1, held: 4, cmdr: 0 }); // held got 2 + 2 from the trigger
+});
+
+test("taps fire triggers; per-point runs once per point; up-changes don't fire 'down'", () => {
+  const d = triggerDash();
+  let r = E.tapAction(d, E.findTile(d, "elves"), -3);
+  assert.deepEqual(Object.fromEntries(r.changes.map((c) => [c.tileId, c.to])), { elves: 1, cmdr: 5 });
+  assert.equal(r.event.label, "Elves −3");
+  r = E.tapAction(d, E.findTile(d, "treasure"), 1);
+  assert.deepEqual(r.changes.map((c) => c.tileId), ["treasure"]);
+});
+
+test("a trigger that would go negative is skipped on its own; the action still happens", () => {
+  const d = triggerDash();
+  d.cells[0].triggers.push({ id: "t3", when: "down", perPoint: false, vars: [], steps: [{ target: tile("held"), op: "-", value: 5 }, { target: tile("cmdr"), op: "+", value: 100 }] });
+  const r = E.tapAction(d, E.findTile(d, "treasure"), -1);
+  assert.deepEqual(Object.fromEntries(r.changes.map((c) => [c.tileId, c.to])), { treasure: 2, cmdr: 3 });
+  assert.equal(r.skippedTriggers.length, 1);
+  assert.equal(r.skippedTriggers[0].blocked.name, "Held");
+});
+
+test("trigger loops are stopped and nothing changes", () => {
+  const d = triggerDash();
+  // Cmdr going up bumps Held; Held going up bumps Cmdr → forever
+  d.cells[2].triggers = [{ id: "a", when: "up", perPoint: false, vars: [], steps: [{ target: tile("held"), op: "+", value: 1 }] }];
+  d.cells[3].triggers = [{ id: "b", when: "up", perPoint: false, vars: [], steps: [{ target: tile("cmdr"), op: "+", value: 1 }] }];
+  const r = E.tapAction(d, E.findTile(d, "cmdr"), 1);
+  assert.equal(r.loop, true);
+  assert.deepEqual(r.changes, []);
+});
+
+test("$change is a built-in inside triggers only", () => {
+  const d = triggerDash();
+  const tr = d.cells[0].triggers[0];
+  assert.equal(E.stepBroken(d, tr, tr.steps[0]), false);
+  assert.equal(E.stepBroken(d, { vars: [], steps: [] }, tr.steps[0]), true);
+  const c = E.duplicateDash(d, "copy");
+  assert.notEqual(c.cells[0].triggers[0].steps[0].target.tileId, "cmdr");
+  assert.equal(c.cells[0].triggers[0].steps[0].target.tileId, c.cells[2].id);
 });

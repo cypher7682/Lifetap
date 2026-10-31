@@ -42,6 +42,7 @@ function CounterTile({ tile, layout, turn, badge, rec, onStep, onHold }) {
         <div class="tile-head">
           <span class=${"tile-icon c-" + tile.color}><${Icon} name=${tile.icon} size=${lay === "full" ? 24 : 20} /></span>
           <span class="tile-name">${tile.name}</span>
+          ${tile.triggers && tile.triggers.length > 0 && html`<span class="trig-mark" title="Has triggers"><${Icon} name="lightning" size=${13} /></span>`}
         </div>
         <div class="tile-body">
           <button class="pm minus" aria-label=${`${tile.name} minus one. Hold to take more.`} ...${minus}><${Icon} name="minus" /></button>
@@ -271,7 +272,7 @@ function HowMany({ kind, tile, macro, dir, turn, onDone, onClose }) {
 
 // ---------------------------------------------------------------- edit-mode sheets
 
-function EditTileSheet({ dash, index, onClose, onRemove, onGrid }) {
+function EditTileSheet({ dash, index, onClose, onRemove, onGrid, onTrigger, onAddTrigger, onDeleteTrigger }) {
   const tile = E.view(dash).cells[index];
   if (!tile) return null;
   const set = (patch) => store.update(dash.id, (d) => E.editDraft(d, (s) => E.updateCell(s, index, patch)));
@@ -297,6 +298,18 @@ function EditTileSheet({ dash, index, onClose, onRemove, onGrid }) {
         <span class="check-box" aria-hidden="true"><${Icon} name="check" size=${18} /></span>
         <span><b>Allow negative</b><span class="muted small">Off: anything that would take this below 0 is rejected.</span></span>
       </label>
+      <div class="field-label">Triggers · run automatically when this changes</div>
+      ${(tile.triggers || []).map((tr) => html`
+        <div class="trig-row" key=${tr.id}>
+          <button class="trig-main" onClick=${() => onTrigger(tr.id)}>
+            <span class="trig-icon"><${Icon} name="lightning" size=${18} /></span>
+            <span class="trig-text"><b>When it ${E.TRIGGER_WHEN[tr.when]}</b>
+              <span class="muted small">${tr.steps.length} step${tr.steps.length === 1 ? "" : "s"} · ${tr.perPoint ? "once per point" : "once"}</span></span>
+            <${Icon} name="pencil" size=${18} />
+          </button>
+          <button class="icon-btn step-del" aria-label="Delete trigger" onClick=${() => onDeleteTrigger(tr.id)}><${Icon} name="x" size=${20} /></button>
+        </div>`)}
+      <button class="btn btn-dashed btn-block" onClick=${onAddTrigger}><${Icon} name="plus" size=${20} />Add trigger</button>
       <div class="field-label">Icon</div>
       <${IconPicker} value=${tile.icon} color=${tile.color} onChange=${(icon) => set({ icon })} />
       <div class="field-label">Colour</div>
@@ -495,10 +508,34 @@ export function DashScreen({ id, nav, autoTurn }) {
     if (recRef.current) setRec((r) => ({ ...r, taps: r.taps + 1 }));
   };
 
+  /** Splash/toast for anything an action (tap or macro, plus its triggers) couldn't do. Returns false if nothing should be committed. */
+  const report = (r, name) => {
+    if (r.loop) {
+      splash("Forced loop found: triggers kept setting each other off. Nothing was changed.", "Forced draw?");
+      return false;
+    }
+    if (r.blocked) {
+      splash(E.blockedMessage(r.blocked));
+      return false;
+    }
+    const warn = [];
+    for (const t of r.skippedTriggers) warn.push(`skipped a ${t.tile} trigger (would take ${t.blocked.name} to −${Math.abs(t.blocked.value)})`);
+    if (r.skippedBroken) warn.push(`skipped ${r.skippedBroken} broken step${r.skippedBroken === 1 ? "" : "s"}`);
+    if (r.divByZero) warn.push("skipped a divide by zero");
+    if (warn.length) toast(`${name}: ${warn.join(", ")}`);
+    return true;
+  };
+
   const step = (tile, delta) => {
-    const blocked = E.tapBlocked(tile, delta);
-    if (blocked) return splash(E.blockedMessage(blocked));
-    commit(E.tapEvent(tile, delta));
+    const r = E.tapAction(E.view(store.get(id)), tile, delta);
+    if (!report(r, tile.name)) return;
+    commit(r.event);
+    if (recRef.current) setRec((rr) => ({ ...rr, direct: { ...rr.direct, [tile.id]: (rr.direct[tile.id] || 0) + delta } }));
+  };
+
+  const flip = (t) => {
+    commit(E.toggleEvent(t));
+    if (recRef.current) setRec((rr) => ({ ...rr, toggled: { ...rr.toggled, [t.id]: t.value ? 0 : 1 } }));
   };
 
   const runMacro = (macroId, times = 1) => {
@@ -506,13 +543,9 @@ export function DashScreen({ id, nav, autoTurn }) {
     const m = E.findMacro(s, macroId);
     if (!m) return;
     const r = E.macroEvent(s, m, times);
-    if (r.blocked) return splash(E.blockedMessage(r.blocked));
+    if (!report(r, m.name)) return;
     commit(r.event);
-    const warn = [];
-    if (r.skippedBroken) warn.push(`skipped ${r.skippedBroken} broken step${r.skippedBroken === 1 ? "" : "s"}`);
-    if (r.divByZero) warn.push("skipped a divide by zero");
-    if (warn.length) toast(`${m.name}: ${warn.join(", ")}`);
-    else if (!r.changes.length) toast(m.steps.length ? `${m.name}: nothing changed` : `${m.name} has no steps yet`);
+    if (!r.changes.length && !r.skippedBroken && !r.divByZero) toast(m.steps.length ? `${m.name}: nothing changed` : `${m.name} has no steps yet`);
   };
 
   const tapMacro = (macroId) => {
@@ -547,7 +580,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     const start = Object.fromEntries(E.holderValues(s));
     setMode("play");
     setBadges({});
-    setRec({ target, start, logLen: d.log.length, redo: d.redo, taps: 0 });
+    setRec({ target, start, direct: {}, toggled: {}, logLen: d.log.length, redo: d.redo, taps: 0 });
     setFlash((f) => f + 1);
   };
 
@@ -556,7 +589,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     if (!r) return;
     const d = store.get(id);
     const s = E.view(d);
-    const steps = E.recordingSteps(s, r.start);
+    const steps = E.recordingSteps(s, r.direct, r.toggled, r.start);
     setRec(null);
     setFlash((f) => f + 1);
     if (!steps.length) {
@@ -699,11 +732,11 @@ export function DashScreen({ id, nav, autoTurn }) {
     if (!cell) return html`<div class="cell-empty" key=${"e" + i} aria-hidden="true"></div>`;
     if (cell.kind === "counter") {
       return html`<${CounterTile} key=${cell.id} tile=${cell} layout=${layout} turn=${turn}
-        badge=${badges[cell.id]} rec=${rec ? cell.value - (rec.start[cell.id] ?? cell.value) : null}
+        badge=${badges[cell.id]} rec=${rec ? rec.direct[cell.id] || 0 : null}
         onStep=${step} onHold=${(tile, dir) => setSheet({ type: "howmany", kind: "tile", tileId: tile.id, dir })} />`;
     }
     if (cell.kind === "toggles") {
-      return html`<${ToggleBox} key=${cell.id} cell=${cell} turn=${turn} onFlip=${(t) => commit(E.toggleEvent(t))} />`;
+      return html`<${ToggleBox} key=${cell.id} cell=${cell} turn=${turn} onFlip=${flip} />`;
     }
     if (cell.kind === "vars") return html`<${VarsBox} key=${cell.id} cell=${cell} vars=${E.dashVars(v)} turn=${turn} />`;
     const m = E.findMacro(v, cell.macroId);
@@ -821,8 +854,17 @@ export function DashScreen({ id, nav, autoTurn }) {
           <${MenuItem} icon="list" label="All dashes" onClick=${() => { close(); nav.back(); }} />
         <//>`;
     } else if (sheet.type === "tile") {
+      const tileId = v.cells[sheet.index] && v.cells[sheet.index].id;
       sheetEl = html`<${EditTileSheet} dash=${dash} index=${sheet.index} onClose=${close}
-        onRemove=${() => removeCell(sheet.index)} onGrid=${() => setSheet({ type: "grid" })} />`;
+        onRemove=${() => removeCell(sheet.index)} onGrid=${() => setSheet({ type: "grid" })}
+        onTrigger=${(triggerId) => { close(); nav.push({ name: "trigger", id, tileId, triggerId }); }}
+        onAddTrigger=${() => {
+          const tr = E.newTrigger("down");
+          store.update(id, (d) => E.editDraft(d, (st) => E.updateCell(st, sheet.index, { triggers: [...(st.cells[sheet.index].triggers || []), tr] })));
+          close();
+          nav.push({ name: "trigger", id, tileId, triggerId: tr.id });
+        }}
+        onDeleteTrigger=${(triggerId) => editWithUndo("Deleted trigger", (st) => E.updateCell(st, sheet.index, { triggers: (st.cells[sheet.index].triggers || []).filter((t) => t.id !== triggerId) }))} />`;
     } else if (sheet.type === "grid") {
       sheetEl = html`<${GridSheet} dash=${dash} onClose=${close} />`;
     } else if (sheet.type === "add") {

@@ -18,6 +18,8 @@ function keyRef(k) {
   if (k.startsWith("d:")) return { kind: "dvar", varId: v };
   return { kind: "var", name: v };
 }
+/** $vars offered in dropdowns: a trigger also gets the built-in $change. */
+const varsFor = (m) => (m.when ? [{ name: "change" }, ...m.vars] : m.vars);
 const isVarRef = (r) => r.kind === "var" || r.kind === "dvar";
 const removedLabel = (r) => (r.kind === "var" || r.kind === "dvar" ? "Var removed" : r.kind === "toggle" ? "Toggle removed" : "Tile removed");
 
@@ -39,7 +41,7 @@ function TargetSelect({ s, macro, step, onChange }) {
       <${Icon} name="updown" size=${16} />
       <select aria-label="Target" value=${broken ? "" : refKey(step.target)} onChange=${(e) => onChange(keyRef(e.currentTarget.value))}>
         ${broken && html`<option value="" disabled>${removedLabel(step.target)}</option>`}
-        <${RefOptions} s=${s} vars=${macro.vars} />
+        <${RefOptions} s=${s} vars=${varsFor(macro)} />
       </select>
     </div>`;
 }
@@ -70,7 +72,7 @@ function ValueBox({ s, macro, step, onChange }) {
       onChange=${(e) => { const k = e.currentTarget.value; onChange(k === "#" ? lastNum.current : keyRef(k)); }}>
       ${broken && html`<option value="" disabled>removed</option>`}
       <option value="#">Type a number</option>
-      <${RefOptions} s=${s} vars=${macro.vars} />
+      <${RefOptions} s=${s} vars=${varsFor(macro)} />
     </select>`;
   if (lit) {
     return html`
@@ -130,10 +132,16 @@ export function VarSheet({ sigil = "$", current, names, onClose, onSave, onDelet
     <//>`;
 }
 
-export function MacroEditor({ id, macroId, nav }) {
+/**
+ * Step editor for a macro, or (with tileId + triggerId) for a counter's trigger.
+ * Triggers have no name/icon/repeats; instead "when" and "per point".
+ */
+export function MacroEditor({ id, macroId, tileId, triggerId, nav }) {
   const dash = store.get(id);
   const s = E.view(dash);
-  const orig = E.findMacro(s, macroId);
+  const isTrigger = !!triggerId;
+  const owner = isTrigger ? E.findTile(s, tileId) : null;
+  const orig = isTrigger ? (owner && (owner.triggers || []).find((t) => t.id === triggerId)) || null : E.findMacro(s, macroId);
   const [m, setM] = useState(() => (orig ? withKeys(orig) : null));
   const [sheet, setSheet] = useState(null);
   const [drag, setDrag] = useState(null);
@@ -146,11 +154,11 @@ export function MacroEditor({ id, macroId, nav }) {
   dirtyRef.current = dirty;
 
   useEffect(() => {
-    nav.setGuard(dirty ? async () => confirm("Discard changes?", "Your edits to this macro haven't been saved.", "Discard", true) : null);
+    nav.setGuard(dirty ? async () => confirm("Discard changes?", `Your edits to this ${isTrigger ? "trigger" : "macro"} haven't been saved.`, "Discard", true) : null);
   }, [dirty]);
 
   if (!m) {
-    return html`<div class="page"><header class="bar-head"><button class="icon-btn round" aria-label="Back" onClick=${() => nav.back()}><${Icon} name="back" /></button><h1 class="head-title">Macro not found</h1></header></div>`;
+    return html`<div class="page"><header class="bar-head"><button class="icon-btn round" aria-label="Back" onClick=${() => nav.back()}><${Icon} name="back" /></button><h1 class="head-title">${isTrigger ? "Trigger" : "Macro"} not found</h1></header></div>`;
   }
 
   const set = (patch) => setM((x) => ({ ...x, ...patch }));
@@ -159,6 +167,18 @@ export function MacroEditor({ id, macroId, nav }) {
 
   const save = () => {
     if (!dirty) return;
+    if (isTrigger) {
+      const out = stripKeys(m);
+      store.update(id, (d) => E.editDraft(d, (st) => {
+        const idx = st.cells.findIndex((c) => c && c.id === tileId);
+        if (idx < 0) return st;
+        const trs = st.cells[idx].triggers || [];
+        return E.updateCell(st, idx, { triggers: trs.some((t) => t.id === out.id) ? trs.map((t) => (t.id === out.id ? out : t)) : [...trs, out] });
+      }));
+      toast("Trigger updated — tap Save on the dash to keep it");
+      nav.forceBack();
+      return;
+    }
     const out = stripKeys({ ...m, name: m.name.trim() || "Macro" });
     store.update(id, (d) => E.editDraft(d, (st) => E.upsertMacro(st, out)));
     toast("Macro updated — tap Save on the dash to keep it");
@@ -232,24 +252,35 @@ export function MacroEditor({ id, macroId, nav }) {
     <div class="page editor-page">
       <header class="bar-head">
         <button class="icon-btn round" aria-label="Back" onClick=${() => nav.back()}><${Icon} name="back" /></button>
-        <h1 class="head-title">Edit macro</h1>
+        <h1 class="head-title">${isTrigger ? "Edit trigger" : "Edit macro"}</h1>
         <button class=${"btn btn-save" + (dirty ? " on" : "")} disabled=${!dirty} onClick=${save}>Save</button>
       </header>
       <div class="scroll">
-        <div class="name-row">
-          <button class="macro-icon-btn" aria-label="Change icon" onClick=${() => setSheet({ type: "icon" })}><${Icon} name=${m.icon} size=${26} /></button>
-          <div class="grow">
-            <label class="field-label" for="mn">Name</label>
-            <input id="mn" class="input" value=${m.name} maxlength="24" onInput=${(e) => set({ name: e.currentTarget.value })} />
+        ${isTrigger ? html`
+          <div class="field-label">When ${owner ? owner.name : "this tile"}…</div>
+          <${Segmented} label="When" value=${m.when} options=${[{ value: "down", label: "Goes down" }, { value: "up", label: "Goes up" }, { value: "change", label: "Changes" }]} onChange=${(w) => set({ when: w })} />
+          <div class="field-label">Run</div>
+          <${Segmented} label="Run" value=${m.perPoint} options=${[{ value: false, label: "Once" }, { value: true, label: "Once per point" }]} onChange=${(pp) => set({ perPoint: pp })} />
+          <p class="hint">${m.perPoint
+            ? html`Taking 3 off runs the steps 3 times, with <span class="dvar-inline mono">$change</span> = 1 each time.`
+            : html`Runs once, with <span class="dvar-inline mono">$change</span> = how much it moved (always positive). Fires straight away, even in the middle of a macro.`}</p>
+        ` : html`
+          <div class="name-row">
+            <button class="macro-icon-btn" aria-label="Change icon" onClick=${() => setSheet({ type: "icon" })}><${Icon} name=${m.icon} size=${26} /></button>
+            <div class="grow">
+              <label class="field-label" for="mn">Name</label>
+              <input id="mn" class="input" value=${m.name} maxlength="24" onInput=${(e) => set({ name: e.currentTarget.value })} />
+            </div>
           </div>
-        </div>
 
-        <div class="field-label">Repeats</div>
-        <${Segmented} label="Repeats" value=${m.repeats} options=${[{ value: false, label: "No" }, { value: true, label: "Yes" }]} onChange=${(r) => set({ repeats: r })} />
-        <p class="hint">‘Yes’ will ask you how many times to run when you run it.</p>
+          <div class="field-label">Repeats</div>
+          <${Segmented} label="Repeats" value=${m.repeats} options=${[{ value: false, label: "No" }, { value: true, label: "Yes" }]} onChange=${(r) => set({ repeats: r })} />
+          <p class="hint">‘Yes’ will ask you how many times to run when you run it.</p>
+        `}
 
-        <div class="field-label">Macro variables · reset every run</div>
+        <div class="field-label">${isTrigger ? "Variables · reset every run" : "Macro variables · reset every run"}</div>
         <div class="chips">
+          ${isTrigger && html`<span class="chip var-chip builtin" title="Built in">$change</span>`}
           ${m.vars.map((x) => html`<button class="chip var-chip" onClick=${() => setSheet({ type: "var", editing: x.name })}>$${x.name} = ${x.initial}</button>`)}
           <button class="chip chip-new" onClick=${() => setSheet({ type: "var", editing: null })}>+ New var</button>
         </div>
@@ -299,6 +330,6 @@ export function MacroEditor({ id, macroId, nav }) {
           <${IconPicker} value=${m.icon} color="green" onChange=${(icon) => { set({ icon }); setSheet(null); }} />
         <//>`}
       ${sheet && sheet.type === "var" && html`<${VarSheet} current=${sheet.editing ? m.vars.find((x) => x.name === sheet.editing) : null}
-        names=${m.vars.map((x) => x.name).filter((n) => n !== sheet.editing)} onClose=${() => setSheet(null)} onSave=${saveVar} onDelete=${delVar} />`}
+        names=${[...(isTrigger ? ["change"] : []), ...m.vars.map((x) => x.name).filter((n) => n !== sheet.editing)]} onClose=${() => setSheet(null)} onSave=${saveVar} onDelete=${delVar} />`}
     </div>`;
 }

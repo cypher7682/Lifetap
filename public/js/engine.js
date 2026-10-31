@@ -186,9 +186,14 @@ export function duplicateDash(dash, name) {
     if (r.kind === "dvar") return { ...r, varId: re(r.varId) };
     return r;
   };
+  const remapStep = (st) => ({ target: remapRef(st.target), op: st.op, value: typeof st.value === "number" ? st.value : remapRef(st.value) });
   const cells = src.cells.map((c) => {
     if (!c) return null;
-    if (c.kind === "counter") return { ...c, id: tileMap.get(c.id) };
+    if (c.kind === "counter") {
+      const out = { ...c, id: tileMap.get(c.id) };
+      if (c.triggers) out.triggers = c.triggers.map((tr) => ({ ...tr, id: uid(), vars: tr.vars.map((v) => ({ ...v })), steps: tr.steps.map(remapStep) }));
+      return out;
+    }
     if (c.kind === "toggles") return { ...c, id: uid(), toggles: c.toggles.map((t) => ({ ...t, id: re(t.id) })) };
     if (c.kind === "vars") return { ...c, id: uid(), show: c.show.map(re) };
     return { ...c, id: uid(), macroId: macroMap.get(c.macroId) };
@@ -197,11 +202,7 @@ export function duplicateDash(dash, name) {
     ...m,
     id: macroMap.get(m.id),
     vars: m.vars.map((v) => ({ ...v })),
-    steps: m.steps.map((st) => ({
-      target: remapRef(st.target),
-      op: st.op,
-      value: typeof st.value === "number" ? st.value : remapRef(st.value),
-    })),
+    steps: m.steps.map(remapStep),
   }));
   const now = Date.now();
   return {
@@ -344,7 +345,7 @@ export function refBroken(s, macro, ref) {
   if (ref.kind === "tile") return !findTile(s, ref.tileId);
   if (ref.kind === "toggle") return !findToggle(s, ref.toggleId);
   if (ref.kind === "dvar") return !findDashVar(s, ref.varId);
-  if (ref.kind === "var") return !macro.vars.some((v) => v.name === ref.name);
+  if (ref.kind === "var") return !(macro.vars.some((v) => v.name === ref.name) || (macro.when && ref.name === "change"));
   return true;
 }
 
@@ -390,53 +391,125 @@ function applyOp(cur, op, v) {
   return cur;
 }
 
+// Safety cap on trigger runs per action, so triggers that set each other off can't hang the app.
+export const MAX_TRIGGER_RUNS = 500;
+
+class Blocked {
+  constructor(info) { this.info = info; }
+}
+class TriggerLoop {}
+
 /**
  * Run a macro `times` times against the structure's current values.
- * Returns { changes: [{tileId, from, to}], skippedBroken, divByZero, blocked }.
- * If any step would take a tile that doesn't allow negatives below zero, the
- * whole run is rejected: changes is empty and blocked = { tileId, name, value }.
+ *
+ * Counter triggers fire immediately: when a step changes a counter that has
+ * triggers, those run right there (and any triggers they set off, depth-first)
+ * before the next step. Each trigger run is all-or-nothing: if it would take a
+ * no-negatives tile below zero, its own changes are rolled back and it's listed
+ * in skippedTriggers, while the rest of the action carries on.
+ *
+ * Returns { changes: [{tileId, from, to}], skippedBroken, divByZero, blocked, loop, skippedTriggers }.
+ * If the macro's own steps would take a no-negatives tile below zero, the whole
+ * run is rejected: changes is empty and blocked = { tileId, name, value }.
+ * If triggers run more than MAX_TRIGGER_RUNS times, loop is true and nothing changes.
  */
 export function runMacro(s, macro, times = 1) {
-  const values = holderValues(s);
-  const noNeg = new Map();
-  for (const t of counters(s)) if (!t.allowNegative) noNeg.set(t.id, t.name);
-  const isToggle = new Set(toggles(s).map((t) => t.id));
-  const before = new Map(values);
-  let skippedBroken = 0;
-  let divByZero = false;
-
-  for (let run = 0; run < times; run++) {
-    const vars = new Map(macro.vars.map((v) => [v.name, toInt(v.initial)]));
-    const read = (ref) => (ref.kind === "var" ? vars.get(ref.name) : values.get(holderId(ref)));
-    const write = (ref, v) => (ref.kind === "var" ? vars.set(ref.name, v) : values.set(holderId(ref), isToggle.has(holderId(ref)) ? (v !== 0 ? 1 : 0) : v));
-    const has = (ref) => ref && (ref.kind === "var" ? vars.has(ref.name) : values.has(holderId(ref)));
-
-    for (const step of macro.steps) {
-      const literal = typeof step.value === "number";
-      if (!has(step.target) || (!literal && !has(step.value))) {
-        if (run === 0) skippedBroken++;
-        continue;
-      }
-      const v = literal ? toInt(step.value) : read(step.value);
-      if (step.op === "/" && v === 0) {
-        divByZero = true;
-        continue;
-      }
-      const next = applyOp(read(step.target), step.op, v);
-      if (next < 0 && noNeg.has(holderId(step.target))) {
-        const blocked = { tileId: step.target.tileId, name: noNeg.get(step.target.tileId), value: next };
-        return { changes: [], skippedBroken, divByZero, blocked };
-      }
-      write(step.target, next);
-    }
+  const ctx = {
+    values: holderValues(s),
+    tiles: new Map(counters(s).map((t) => [t.id, t])),
+    isToggle: new Set(toggles(s).map((t) => t.id)),
+    broken: new Set(),
+    divByZero: false,
+    triggerRuns: 0,
+    skippedTriggers: [],
+  };
+  const before = new Map(ctx.values);
+  const result = (extra) => ({
+    changes: [], skippedBroken: ctx.broken.size, divByZero: ctx.divByZero, blocked: null, loop: false,
+    skippedTriggers: ctx.skippedTriggers, ...extra,
+  });
+  try {
+    for (let run = 0; run < times; run++) execSteps(ctx, macro, null);
+  } catch (e) {
+    if (e instanceof Blocked) return result({ blocked: e.info });
+    if (e instanceof TriggerLoop) return result({ loop: true, skippedTriggers: [] });
+    throw e;
   }
-
   const changes = [];
   for (const [id, from] of before) {
-    const to = values.get(id);
+    const to = ctx.values.get(id);
     if (to !== from) changes.push({ tileId: id, from, to });
   }
-  return { changes, skippedBroken, divByZero, blocked: null };
+  return result({ changes });
+}
+
+/** One run of a step list. `change` is the built-in $change for triggers (null for macros). */
+function execSteps(ctx, macro, change) {
+  const vars = new Map(macro.vars.map((v) => [v.name, toInt(v.initial)]));
+  if (change != null) vars.set("change", change);
+  const read = (ref) => (ref.kind === "var" ? vars.get(ref.name) : ctx.values.get(holderId(ref)));
+  const has = (ref) => ref && (ref.kind === "var" ? vars.has(ref.name) : ctx.values.has(holderId(ref)));
+
+  for (const step of macro.steps) {
+    const literal = typeof step.value === "number";
+    if (!has(step.target) || (!literal && !has(step.value))) {
+      ctx.broken.add(step);
+      continue;
+    }
+    const v = literal ? toInt(step.value) : read(step.value);
+    if (step.op === "/" && v === 0) {
+      ctx.divByZero = true;
+      continue;
+    }
+    if (step.target.kind === "var") {
+      vars.set(step.target.name, applyOp(read(step.target), step.op, v));
+      continue;
+    }
+    const id = holderId(step.target);
+    const prev = ctx.values.get(id);
+    let next = applyOp(prev, step.op, v);
+    if (ctx.isToggle.has(id)) next = next !== 0 ? 1 : 0;
+    const tile = ctx.tiles.get(id);
+    if (tile && next < 0 && !tile.allowNegative) throw new Blocked({ tileId: id, name: tile.name, value: next });
+    ctx.values.set(id, next);
+    if (tile && next !== prev) fireTriggers(ctx, tile, prev, next);
+  }
+}
+
+function fireTriggers(ctx, tile, prev, next) {
+  if (!tile.triggers || !tile.triggers.length) return;
+  const delta = next - prev;
+  for (const tr of tile.triggers) {
+    if ((tr.when === "down" && delta >= 0) || (tr.when === "up" && delta <= 0)) continue;
+    const size = Math.abs(delta);
+    const runs = tr.perPoint ? size : 1;
+    const snap = new Map(ctx.values);
+    try {
+      for (let k = 0; k < runs; k++) {
+        if (++ctx.triggerRuns > MAX_TRIGGER_RUNS) throw new TriggerLoop();
+        execSteps(ctx, tr, tr.perPoint ? 1 : size);
+      }
+    } catch (e) {
+      if (!(e instanceof Blocked)) throw e;
+      ctx.values.clear();
+      for (const [k, val] of snap) ctx.values.set(k, val);
+      ctx.skippedTriggers.push({ tile: tile.name, blocked: e.info });
+    }
+  }
+}
+
+/** A +/− on one tile, run through the macro engine so its triggers fire. */
+export function tapAction(s, tile, delta) {
+  const mac = { vars: [], steps: [{ target: { kind: "tile", tileId: tile.id }, op: delta > 0 ? "+" : "-", value: Math.abs(delta) }] };
+  const r = runMacro(s, mac, 1);
+  const sign = delta > 0 ? "+" : "−";
+  return { ...r, event: makeEvent(Math.abs(delta) === 1 ? "tap" : "bulk", `${tile.name} ${sign}${Math.abs(delta)}`, r.changes) };
+}
+
+export const TRIGGER_WHEN = { down: "goes down", up: "goes up", change: "changes" };
+
+export function newTrigger(when = "down") {
+  return { id: uid(), when, perPoint: false, vars: [], steps: [] };
 }
 
 /** For a direct +/− on a tile: the blocked info if it would go below zero, else null. */
@@ -449,19 +522,20 @@ export function blockedMessage(b) {
   return `Would take ${b.name} to −${Math.abs(b.value)}. Couldn't execute.`;
 }
 
-/** Steps captured by a recording: one +/− per tile with a non-zero net change. */
-export function recordingSteps(s, startValues) {
+/**
+ * Steps captured by a recording: one +/− per tile you tapped (net), and one "="
+ * per toggle you left changed. Only direct taps count; what triggers did is
+ * left out, since the triggers will fire again when the macro runs.
+ * direct: { tileId: net delta }, toggled: { toggleId: final 0/1 }, start: values when recording began.
+ */
+export function recordingSteps(s, direct, toggled = {}, start = {}) {
   const steps = [];
   for (const t of counters(s)) {
-    if (!(t.id in startValues)) continue;
-    const d = t.value - startValues[t.id];
-    if (d === 0) continue;
-    steps.push({ target: { kind: "tile", tileId: t.id }, op: d > 0 ? "+" : "-", value: Math.abs(d) });
+    const d = direct[t.id] || 0;
+    if (d) steps.push({ target: { kind: "tile", tileId: t.id }, op: d > 0 ? "+" : "-", value: Math.abs(d) });
   }
   for (const t of toggles(s)) {
-    if (t.id in startValues && (t.value ? 1 : 0) !== startValues[t.id]) {
-      steps.push({ target: { kind: "toggle", toggleId: t.id }, op: "=", value: t.value ? 1 : 0 });
-    }
+    if (t.id in toggled && toggled[t.id] !== start[t.id]) steps.push({ target: { kind: "toggle", toggleId: t.id }, op: "=", value: toggled[t.id] });
   }
   return steps;
 }

@@ -609,3 +609,18 @@ h1, h2, p { margin: 0; }
 .edit-tile, .edit-bar .slot-btn { -webkit-touch-callout: none; transition: box-shadow .12s, border-color .12s; }
 .dragging { position: relative; z-index: 30; pointer-events: none; box-shadow: 0 16px 40px rgba(0, 0, 0, .6); opacity: .85; border-style: solid !important; border-color: var(--purple) !important; }
 .drop-ok { border: 2px solid var(--green) !important; background: rgba(95, 199, 122, .12) !important; }
+
+/* big splash (forced loop) */
+.splash-big { width: min(340px, calc(100% - 40px)); flex-direction: column; text-align: center; padding: 26px 22px 22px; gap: 12px; animation-duration: 4s; }
+.splash-big .splash-icon { width: 48px; height: 48px; font-size: 26px; }
+.splash-title { display: block; font-size: 26px; font-weight: 680; letter-spacing: -.01em; margin-bottom: 6px; }
+
+/* triggers */
+.trig-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.trig-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 14px 8px 10px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; text-align: left; color: var(--muted); }
+.trig-icon { width: 34px; height: 34px; flex: none; border-radius: 10px; display: grid; place-items: center; background: rgba(226, 179, 65, .14); color: var(--amber); }
+.trig-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.trig-text b { color: var(--text); font-weight: 600; font-size: 15px; }
+.trig-mark { color: var(--amber); display: inline-grid; place-items: center; }
+.lay-full .tile-head .trig-mark { position: absolute; top: 12px; left: 12px; }
+.var-chip.builtin { opacity: .75; border-style: dashed; display: inline-flex; align-items: center; }

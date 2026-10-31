@@ -42,12 +42,12 @@ export function snack(text, action = null, onAction = null) {
 export const toast = (text) => snack(text);
 
 /** Brief centred error splash, e.g. a macro rejected for going negative. */
-export function splash(text) {
+export function splash(text, title = null) {
   clearTimeout(splashTimer);
-  overlay.splash = { text, key: Math.random() };
+  overlay.splash = { text, title, key: Math.random() };
   emitOverlay();
   haptic();
-  splashTimer = setTimeout(() => { overlay.splash = null; emitOverlay(); }, 2600);
+  splashTimer = setTimeout(() => { overlay.splash = null; emitOverlay(); }, title ? 4000 : 2600);
 }
 
 function useOverlay() {
@@ -75,9 +75,9 @@ export function Overlays() {
         </div>
       </div>`}
     ${o.splash && html`
-      <div class="splash" key=${o.splash.key} role="alert" onClick=${() => { overlay.splash = null; emitOverlay(); }}>
+      <div class=${"splash" + (o.splash.title ? " splash-big" : "")} key=${o.splash.key} role="alert" onClick=${() => { overlay.splash = null; emitOverlay(); }}>
         <span class="splash-icon" aria-hidden="true">!</span>
-        <span>${o.splash.text}</span>
+        <span>${o.splash.title && html`<b class="splash-title">${o.splash.title}</b>`}${o.splash.text}</span>
       </div>`}
     ${o.snack && html`
       <div class="snack" key=${o.snack.key} role="status">

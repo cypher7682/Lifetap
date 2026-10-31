@@ -107,6 +107,7 @@ function App() {
   if (top.name === "new") screenEl = html`<${NewDash} nav=${nav} />`;
   else if (top.name === "dash" && store.get(top.id)) screenEl = html`<${DashScreen} key=${top.id} id=${top.id} nav=${nav} autoTurn=${auto.turn} />`;
   else if (top.name === "macro" && store.get(top.id)) screenEl = html`<${MacroEditor} key=${top.macroId} id=${top.id} macroId=${top.macroId} nav=${nav} />`;
+  else if (top.name === "trigger" && store.get(top.id)) screenEl = html`<${MacroEditor} key=${top.triggerId} id=${top.id} tileId=${top.tileId} triggerId=${top.triggerId} nav=${nav} />`;
   else screenEl = html`<${DashList} nav=${nav} />`;
 
   const rootStyle = auto.turn
