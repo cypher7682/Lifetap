@@ -19,6 +19,10 @@
   --green: #5fc77a;
   --amber: #e2b341;
   --red: #e5484d;
+  --blue: #5b8def;
+  --orange: #f08a4b;
+  --pink: #e36aa8;
+  --grey: #a3a8b3;
   --red-text: #ff8a8d;
   --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
@@ -79,6 +83,12 @@ h1, h2, p { margin: 0; }
 .tint-green { background: rgba(95, 199, 122, .16); color: var(--green); }
 .tint-amber { background: rgba(226, 179, 65, .16); color: var(--amber); }
 .tint-red { background: rgba(229, 72, 77, .16); color: var(--red-text); }
+.tint-blue { background: rgba(91, 141, 239, .16); color: var(--blue); }
+.tint-orange { background: rgba(240, 138, 75, .16); color: var(--orange); }
+.tint-pink { background: rgba(227, 106, 168, .16); color: var(--pink); }
+.tint-grey { background: rgba(163, 168, 179, .14); color: var(--grey); }
+.c-blue { color: var(--blue); } .c-orange { color: var(--orange); } .c-pink { color: var(--pink); } .c-grey { color: var(--grey); }
+.bg-blue { background: var(--blue); } .bg-orange { background: var(--orange); } .bg-pink { background: var(--pink); } .bg-grey { background: var(--grey); }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .center { text-align: center; }
@@ -204,7 +214,7 @@ h1, h2, p { margin: 0; }
 .icon-picker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .icon-opt { height: 50px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line-2); display: grid; place-items: center; color: var(--text); }
 .icon-opt.on { border-width: 2px; border-color: currentColor; background: rgba(255, 255, 255, .05); }
-.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatches { display: grid; grid-template-columns: repeat(5, 48px); justify-content: space-between; row-gap: 10px; }
 .swatch { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; }
 .swatch-dot { width: 34px; height: 34px; border-radius: 50%; display: block; }
 .swatch.on .swatch-dot { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--text); }

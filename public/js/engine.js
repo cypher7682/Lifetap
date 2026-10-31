@@ -2,7 +2,9 @@
 // unit-tested in tests/engine.test.mjs.
 
 export const ICONS = ["droplet", "hexplus", "person", "layers", "heart", "lightning", "skull", "spiral", "chest", "altar"];
-export const COLORS = ["teal", "purple", "green", "amber", "red"];
+// Every colour a tile or dash can use. New counters cycle through the first five.
+export const COLORS = ["teal", "purple", "green", "amber", "red", "blue", "orange", "pink", "grey"];
+const DEFAULT_COLORS = COLORS.slice(0, 5);
 export const GRIDS = [
   { cols: 2, rows: 2 },
   { cols: 2, rows: 3 },
@@ -122,7 +124,7 @@ export function newCounter(i, overrides = {}) {
     id: uid(),
     name: `Counter ${i + 1}`,
     icon: ICONS[i % 9],
-    color: COLORS[i % COLORS.length],
+    color: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
     start: 0,
     allowNegative: false,
     value: 0,
@@ -152,7 +154,7 @@ export function createDash({ name, count, grid, index = 0 }) {
     id: uid(),
     name,
     icon: ICONS[index % ICONS.length],
-    color: COLORS[index % COLORS.length],
+    color: DEFAULT_COLORS[index % DEFAULT_COLORS.length],
     grid: { ...grid },
     cells,
     bar: Array(BAR_SLOTS).fill(null),
