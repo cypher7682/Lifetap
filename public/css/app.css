@@ -528,3 +528,27 @@ h1, h2, p { margin: 0; }
 .play-grid.g-3x3, .play-grid.g-3x4 { --gap: 8px; }
 .lay-compact .tc { padding: 8px 4px 4px; }
 .lay-compact .tile-body { gap: 4px; }
+
+/* install splash */
+.inst-scrim { display: grid; place-items: center; padding: 20px; background: rgba(5, 6, 8, .78); z-index: 150; }
+.inst-card {
+  width: 100%; max-width: 360px; background: #17191e; border: 1px solid var(--line-2); border-radius: 28px;
+  padding: 26px 20px 18px; text-align: center; box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+  animation: up .25s cubic-bezier(.2, .8, .3, 1);
+}
+.inst-icon { width: 76px; height: 76px; border-radius: 18px; display: block; margin: 0 auto 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
+.inst-card h2 { font-size: 21px; font-weight: 680; letter-spacing: -.01em; line-height: 1.25; }
+.inst-lede { color: var(--muted); font-size: 15px; line-height: 1.4; margin-top: 8px; }
+.inst-steps { list-style: none; margin: 20px 0 0; padding: 0; text-align: left; display: grid; gap: 10px; }
+.inst-step { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; font-size: 15px; line-height: 1.35; }
+.inst-step b { font-weight: 600; }
+.inst-n { width: 26px; height: 26px; flex: none; border-radius: 50%; background: rgba(63, 183, 189, .16); color: var(--teal); display: grid; place-items: center; font-weight: 680; font-size: 14px; }
+.inst-glyph { display: inline-grid; place-items: center; width: 28px; height: 26px; border-radius: 8px; background: var(--surface-2); color: var(--teal); vertical-align: middle; margin: -3px 2px 0; }
+.inst-note { display: flex; gap: 8px; align-items: flex-start; text-align: left; color: var(--muted); font-size: 13px; line-height: 1.4; margin-top: 14px; }
+.inst-note .ic { margin-top: 1px; color: var(--amber); }
+.inst-btns { display: flex; gap: 10px; margin-top: 18px; }
+.inst-btns .btn { flex: 1; }
+.inst-again {
+  margin: 4px auto calc(28px + var(--safe-bottom)); display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 18px; border-radius: 22px; border: 1.5px dashed var(--line-2); color: var(--muted); font-weight: 560; font-size: 15px;
+}

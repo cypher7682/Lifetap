@@ -31,6 +31,11 @@ const P = {
   grid: html`<rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" />`,
   bar: html`<circle cx="6" cy="17" r="2.5" /><circle cx="12" cy="17" r="2.5" /><circle cx="18" cy="17" r="2.5" /><path d="M4 8h16" />`,
   list: html`<path d="M5 6.5h14M5 12h14M5 17.5h14" />`,
+  share: html`<path d="M12 3.5v11M8 7l4-3.5L16 7" /><path d="M8.5 10.5H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1.5" />`,
+  addsquare: html`<rect x="4" y="4" width="16" height="16" rx="4" /><path d="M12 8.5v7M8.5 12h7" />`,
+  dotsv: html`<path d="M12 5.5h.01M12 12h.01M12 18.5h.01" stroke-width="3.2" />`,
+  home: html`<path d="M4.5 10.5 12 4l7.5 6.5V19a1 1 0 0 1-1 1h-4v-5.5h-5V20h-4a1 1 0 0 1-1-1z" />`,
+  download: html`<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />`,
 };
 
 const FILLED = {

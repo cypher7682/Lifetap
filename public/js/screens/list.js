@@ -4,6 +4,7 @@ import * as E from "../engine.js";
 import { Icon } from "../icons.js";
 import { usePress, Sheet, confirm, snack } from "../ui.js";
 import { IconPicker, ColorPicker } from "./pickers.js";
+import { InstallSplash, canOfferInstall, installDismissed } from "../install.js";
 
 function DashCard({ dash, onOpen, onHold }) {
   const v = E.view(dash);
@@ -59,6 +60,8 @@ function DashOptions({ dash, onClose }) {
 export function DashList({ nav }) {
   const dashes = store.list();
   const [opts, setOpts] = useState(null);
+  const offer = canOfferInstall();
+  const [install, setInstall] = useState(() => offer && !installDismissed());
   return html`
     <div class="page list-page">
       <h1 class="page-title">Dashes</h1>
@@ -70,6 +73,9 @@ export function DashList({ nav }) {
           <span class="card-name">Add new</span>
         </button>
       </div>
+      ${offer && !install && html`
+        <button class="inst-again" onClick=${() => setInstall(true)}><${Icon} name="download" size=${18} />Install as an app</button>`}
       ${opts && store.get(opts) && html`<${DashOptions} dash=${store.get(opts)} onClose=${() => setOpts(null)} />`}
+      ${install && html`<${InstallSplash} onClose=${() => setInstall(false)} />`}
     </div>`;
 }
