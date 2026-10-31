@@ -304,6 +304,31 @@ export function deleteDashVar(s, id) {
   };
 }
 
+/**
+ * Move whatever is at `from` to `to`, swapping with anything already there.
+ * Positions are { zone: "cell" | "bar", index }. The macro bar only holds
+ * macros, so a counter/toggles/vars box can't go there (or be swapped onto it).
+ * Returns the new structure, or null if the move isn't allowed.
+ */
+export function moveSlot(s, from, to) {
+  if (from.zone === to.zone && from.index === to.index) return null;
+  const cells = s.cells.slice();
+  const bar = s.bar.slice();
+  const get = (p) => (p.zone === "cell" ? cells[p.index] : bar[p.index] ? { kind: "macro", macroId: bar[p.index] } : null);
+  const a = get(from);
+  const b = get(to);
+  if (!a) return null;
+  if (to.zone === "bar" && a.kind !== "macro") return null;
+  if (from.zone === "bar" && b && b.kind !== "macro") return null;
+  const put = (p, item) => {
+    if (p.zone === "bar") bar[p.index] = item ? item.macroId : null;
+    else cells[p.index] = !item ? null : item.id ? item : { kind: "macro", id: uid(), macroId: item.macroId };
+  };
+  put(to, a);
+  put(from, b);
+  return { ...s, cells, bar };
+}
+
 /** Next unused "Macro N" name. */
 export function nextMacroName(s) {
   const used = new Set(s.macros.map((m) => m.name));

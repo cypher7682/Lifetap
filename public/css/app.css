@@ -594,3 +594,8 @@ h1, h2, p { margin: 0; }
 .edit-kind.c-teal { color: var(--teal); }
 .edit-kind.c-amber { color: var(--amber); }
 .sel.is-dvar { font-family: var(--font); font-weight: 560; }
+
+/* drag to rearrange (edit mode) */
+.edit-tile, .edit-bar .slot-btn { -webkit-touch-callout: none; transition: box-shadow .12s, border-color .12s; }
+.dragging { position: relative; z-index: 30; pointer-events: none; box-shadow: 0 16px 40px rgba(0, 0, 0, .6); opacity: .85; border-style: solid !important; border-color: var(--purple) !important; }
+.drop-ok { border: 2px solid var(--green) !important; background: rgba(95, 199, 122, .12) !important; }

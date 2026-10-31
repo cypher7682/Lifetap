@@ -2,7 +2,7 @@ import { html, useState, useEffect, useRef } from "../../vendor/preact-htm.js";
 import * as store from "../store.js";
 import * as E from "../engine.js";
 import { Icon } from "../icons.js";
-import { usePress, Sheet, Popover, MenuItem, Segmented, IntInput, dialog, confirm, snack, toast, splash } from "../ui.js";
+import { usePress, Sheet, Popover, MenuItem, Segmented, IntInput, dialog, confirm, snack, toast, splash, haptic } from "../ui.js";
 import { IconPicker, ColorPicker, GridPicker } from "./pickers.js";
 import { VarSheet } from "./editor.js";
 
@@ -127,6 +127,102 @@ function VarsBox({ cell, vars, turn }) {
           : html`<div class="vb-empty">No variables picked. Choose some in edit mode.</div>`}
       </div>
     </div>`;
+}
+
+// ---------------------------------------------------------------- drag to rearrange (edit mode)
+
+const DRAG_HOLD_MS = 350;
+const slotKey = (p) => p.zone + ":" + p.index;
+
+/**
+ * Hold a tile, then drag it onto another slot. Spread bind(pos, onTap) onto
+ * each slot element; draggable(pos) says whether that slot can be picked up.
+ * A quick tap still calls onTap. Scrolling is blocked only while dragging.
+ */
+function useSlotDrag({ draggable, canDrop, onDrop }) {
+  const [drag, setDrag] = useState(null); // { from, over, dx, dy }
+  const r = useRef({ timer: 0, start: null, active: null, over: null, suppress: false });
+  const cfg = useRef();
+  cfg.current = { canDrop, onDrop };
+
+  useEffect(() => {
+    const st = r.current;
+    const end = (drop) => {
+      if (!st.active) return;
+      const { from } = st.active;
+      const over = st.over;
+      st.active = null;
+      st.over = null;
+      st.suppress = true;
+      setTimeout(() => (st.suppress = false), 120);
+      setDrag(null);
+      if (drop && over) cfg.current.onDrop(from, over);
+    };
+    const move = (e) => {
+      if (!st.active) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-slot]");
+      let over = null;
+      if (el) {
+        const [zone, i] = el.dataset.slot.split(":");
+        const pos = { zone, index: +i };
+        if (slotKey(pos) !== slotKey(st.active.from) && cfg.current.canDrop(st.active.from, pos)) over = pos;
+      }
+      st.over = over;
+      setDrag({ from: st.active.from, over, dx: e.clientX - st.active.x, dy: e.clientY - st.active.y });
+    };
+    const up = () => end(true);
+    const cancel = () => end(false);
+    const noScroll = (e) => st.active && e.cancelable && e.preventDefault();
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("touchmove", noScroll, { passive: false });
+    return () => {
+      clearTimeout(st.timer);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("touchmove", noScroll);
+    };
+  }, []);
+
+  const bind = (pos, onTap) => {
+    const st = r.current;
+    const can = draggable(pos);
+    const key = slotKey(pos);
+    const cls = drag ? (slotKey(drag.from) === key ? " dragging" : drag.over && slotKey(drag.over) === key ? " drop-ok" : "") : "";
+    return {
+      "data-slot": key,
+      class: cls,
+      style: drag && slotKey(drag.from) === key ? { transform: `translate(${drag.dx}px, ${drag.dy}px) scale(.88)` } : null,
+      onPointerDown: (e) => {
+        if (!can || e.button > 0) return;
+        clearTimeout(st.timer);
+        st.start = { x: e.clientX, y: e.clientY };
+        st.timer = setTimeout(() => {
+          st.active = { from: pos, x: st.start.x, y: st.start.y };
+          haptic();
+          setDrag({ from: pos, over: null, dx: 0, dy: 0 });
+        }, DRAG_HOLD_MS);
+      },
+      onPointerMove: (e) => {
+        if (st.active || !st.start) return;
+        if (Math.abs(e.clientX - st.start.x) > 10 || Math.abs(e.clientY - st.start.y) > 10) clearTimeout(st.timer);
+      },
+      onPointerUp: () => !st.active && clearTimeout(st.timer),
+      onPointerLeave: () => !st.active && clearTimeout(st.timer),
+      onContextMenu: (e) => e.preventDefault(),
+      onClick: (e) => {
+        if (st.suppress) {
+          st.suppress = false;
+          e.preventDefault();
+          return;
+        }
+        onTap && onTap(e);
+      },
+    };
+  };
+  return { bind, dragging: !!drag };
 }
 
 // ---------------------------------------------------------------- how-many sheet
@@ -328,6 +424,15 @@ export function DashScreen({ id, nav, autoTurn }) {
   const [flash, setFlash] = useState(0);
   const [selected, setSelected] = useState(null);
   const timers = useRef({});
+  const slotAt = (p) => (p.zone === "cell" ? v.cells[p.index] : v.bar[p.index]);
+  const slotDrag = useSlotDrag({
+    draggable: (p) => !!slotAt(p),
+    canDrop: (from, to) => !!E.moveSlot(E.view(store.get(id)), from, to),
+    onDrop: (from, to) => {
+      setSelected(null);
+      store.update(id, (d) => E.editDraft(d, (st) => E.moveSlot(st, from, to) || st));
+    },
+  });
   const recRef = useRef(rec);
   recRef.current = rec;
 
@@ -610,16 +715,17 @@ export function DashScreen({ id, nav, autoTurn }) {
 
   const renderEditCell = (cell, i) => {
     if (!cell) {
-      return html`<button key=${"e" + i} class="tile edit-tile edit-empty" aria-label="Empty cell. Add a counter, macro, toggles or vars box." onClick=${() => setSheet({ type: "add", index: i })}>
+      const b = slotDrag.bind({ zone: "cell", index: i }, () => setSheet({ type: "add", index: i }));
+      return html`<button key=${"e" + i} ...${b} class=${"tile edit-tile edit-empty" + b.class} aria-label="Empty cell. Add a counter, macro, toggles or vars box.">
         <${Icon} name="plus" size=${28} /></button>`;
     }
     if (cell.kind === "toggles" || cell.kind === "vars") {
       const isT = cell.kind === "toggles";
+      const bind = slotDrag.bind({ zone: "cell", index: i }, () => { setSelected(i); setSheet({ type: isT ? "togglecell" : "varscell", index: i }); });
       const label = isT ? cell.toggles.map((t) => t.name).join(" · ")
         : cell.show.map((vid) => E.findDashVar(v, vid)).filter(Boolean).map((x) => "@" + x.name).join(" · ") || "No vars picked";
       return html`
-        <button key=${cell.id} class=${"tile edit-tile" + (selected === i ? " picked" : "")} aria-label=${`Edit ${isT ? "toggle box" : "vars box"}: ${label}`}
-          onClick=${() => { setSelected(i); setSheet({ type: isT ? "togglecell" : "varscell", index: i }); }}>
+        <button key=${cell.id} ...${bind} class=${"tile edit-tile" + (selected === i ? " picked" : "") + bind.class} aria-label=${`Edit ${isT ? "toggle box" : "vars box"}: ${label}. Hold and drag to move.`}>
           <span class=${isT ? "c-teal" : "c-amber"}><${Icon} name=${isT ? "toggle" : "vars"} size=${24} /></span>
           <span class="edit-name">${label}</span>
           <span class=${"edit-kind " + (isT ? "c-teal" : "c-amber")}>${isT ? "toggles" : "vars box"}</span>
@@ -630,10 +736,10 @@ export function DashScreen({ id, nav, autoTurn }) {
     const name = isMacro ? (m ? m.name : "?") : cell.name;
     const icon = isMacro ? (m ? m.icon : "altar") : cell.icon;
     const color = isMacro ? "green" : cell.color;
+    const bind = slotDrag.bind({ zone: "cell", index: i }, () => { setSelected(i); setSheet(isMacro ? { type: "macrocell", macroId: cell.macroId, index: i } : { type: "tile", index: i }); });
     return html`
-      <button key=${cell.id} class=${"tile edit-tile" + (isMacro ? " edit-macro" : "") + (selected === i ? " picked" : "")}
-        aria-label=${`Edit ${isMacro ? "macro" : "tile"} ${name}`}
-        onClick=${() => { setSelected(i); setSheet(isMacro ? { type: "macrocell", macroId: cell.macroId, index: i } : { type: "tile", index: i }); }}>
+      <button key=${cell.id} ...${bind} class=${"tile edit-tile" + (isMacro ? " edit-macro" : "") + (selected === i ? " picked" : "") + bind.class}
+        aria-label=${`Edit ${isMacro ? "macro" : "tile"} ${name}. Hold and drag to move.`}>
         <span class=${"c-" + color}><${Icon} name=${icon} size=${24} /></span>
         <span class="edit-name">${name}</span>
         ${isMacro && html`<span class="edit-kind">macro</span>`}
@@ -655,7 +761,7 @@ export function DashScreen({ id, nav, autoTurn }) {
       <header class="dash-head edit-head">
         <div class="edit-titles">
           <div class="head-title">${dash.name}</div>
-          <div class="head-sub">Editing · tap a tile to change it</div>
+          <div class="head-sub">Tap to change · hold and drag to move</div>
         </div>
         <button class=${"btn btn-save" + (pending ? " on" : "")} disabled=${!pending} onClick=${save}><${Icon} name="save" size=${20} />Save</button>
         <button class="btn btn-primary btn-done" onClick=${() => { setMode("play"); setSelected(null); setSheet(null); }}>Done</button>
@@ -791,11 +897,12 @@ export function DashScreen({ id, nav, autoTurn }) {
             <div class="macro-bar edit-bar">
               ${v.bar.map((mid, i) => {
                 const m = mid && E.findMacro(v, mid);
+                const b = slotDrag.bind({ zone: "bar", index: i }, m ? () => setSheet({ type: "macroslot", macroId: m.id }) : () => addMacroSlot(i));
                 return html`<div class="slot" key=${i}>
                   ${m
-                    ? html`<button class="slot-btn slot-set" aria-label=${`Edit ${m.name}`} onClick=${() => setSheet({ type: "macroslot", macroId: m.id })}><${Icon} name=${m.icon} size=${26} /></button>
+                    ? html`<button ...${b} class=${"slot-btn slot-set" + b.class} aria-label=${`Edit ${m.name}. Hold and drag to move.`}><${Icon} name=${m.icon} size=${26} /></button>
                       <span class="slot-label">${m.name}</span>`
-                    : html`<button class="slot-btn slot-empty" aria-label=${`New macro in slot ${i + 1}`} onClick=${() => addMacroSlot(i)}><${Icon} name="plus" size=${22} /></button>
+                    : html`<button ...${b} class=${"slot-btn slot-empty" + b.class} aria-label=${`New macro in slot ${i + 1}`}><${Icon} name="plus" size=${22} /></button>
                       <span class="slot-label muted">${i === v.bar.indexOf(null) ? "New macro" : "\u00a0"}</span>`}
                 </div>`;
               })}

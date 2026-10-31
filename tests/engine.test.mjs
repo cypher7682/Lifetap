@@ -300,3 +300,27 @@ test("draft vars: new var lives in draft, values write through", () => {
   assert.equal(E.findDashVar(E.view(d), "tax").value, 9);
   assert.equal(E.findDashVar(E.saveDraft(d), "new").value, 3);
 });
+
+test("moveSlot: swap cells, move into empties, macros between grid and bar", () => {
+  const C = (id) => ({ kind: "counter", id, name: id, value: 0 });
+  const s = { cells: [C("a"), C("b"), null, { kind: "macro", id: "mt", macroId: "m2" }], bar: ["m1", null, null, null], macros: [] };
+  const cell = (index) => ({ zone: "cell", index }), slot = (index) => ({ zone: "bar", index });
+  assert.deepEqual(E.moveSlot(s, cell(0), cell(1)).cells.map((c) => c && c.id), ["b", "a", null, "mt"]);
+  assert.deepEqual(E.moveSlot(s, cell(0), cell(2)).cells.map((c) => c && c.id), [null, "b", "a", "mt"]);
+  assert.equal(E.moveSlot(s, cell(2), cell(0)), null); // nothing to move
+  assert.equal(E.moveSlot(s, cell(0), cell(0)), null);
+  assert.equal(E.moveSlot(s, cell(0), slot(1)), null); // counters can't go on the bar
+  assert.equal(E.moveSlot(s, slot(0), cell(0)), null); // ...or be swapped onto it
+  // macro tile -> empty bar slot
+  let r = E.moveSlot(s, cell(3), slot(1));
+  assert.deepEqual(r.bar, ["m1", "m2", null, null]);
+  assert.equal(r.cells[3], null);
+  // bar macro <-> macro tile swap
+  r = E.moveSlot(s, slot(0), cell(3));
+  assert.deepEqual(r.bar, ["m2", null, null, null]);
+  assert.equal(r.cells[3].macroId, "m1");
+  assert.ok(r.cells[3].id);
+  // bar -> empty cell, bar -> bar
+  assert.equal(E.moveSlot(s, slot(0), cell(2)).cells[2].macroId, "m1");
+  assert.deepEqual(E.moveSlot(s, slot(0), slot(3)).bar, [null, null, null, "m1"]);
+});
