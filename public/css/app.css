@@ -627,3 +627,8 @@ h1, h2, p { margin: 0; }
 .tgl-trigs { margin: 8px 0 4px 14px; padding-left: 12px; border-left: 2px solid var(--line-2); }
 .tgl-trig { display: inline-block; vertical-align: -1px; margin-right: 4px; color: var(--amber); }
 .tgl.on .tgl-trig { color: #07200f; }
+
+/* swipe-to-dismiss: a bigger grab area, and no scroll chaining from the sheet */
+.sheet { overscroll-behavior: contain; }
+.sheet-grab { position: relative; }
+.sheet-grab::after { content: ""; position: absolute; left: -60px; right: -60px; top: -12px; bottom: -12px; }

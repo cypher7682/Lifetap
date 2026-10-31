@@ -143,10 +143,92 @@ export function usePress({ onTap, onLong, disabled = false }) {
 
 // ---------------------------------------------------------------- sheets & popovers
 
-/** Bottom sheet. With `turn`, the sheet sits on the physical bottom edge of a turned phone. */
+// How far the whole app is rotated on screen (set by app.js when the OS turns the page
+// to landscape), so gestures can work out which way is "down" for a sheet.
+let rootTurn = 0;
+export function setRootTurn(deg) {
+  rootTurn = deg;
+}
+
+const DISMISS_PX = 90; // drag further than this...
+const DISMISS_SPEED = 0.6; // ...or flick faster than this (px/ms) to close
+
+/**
+ * Swipe a sheet down to dismiss it. Dragging starts from the grab handle at any
+ * time, or from the content when it's scrolled to the top; otherwise the
+ * content just scrolls. `angle` is the sheet's total on-screen rotation.
+ */
+function useSwipeDismiss(panelRef, angle, onClose) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const rad = (angle * Math.PI) / 180;
+    // the sheet's "down" in screen coordinates, for CSS rotate(angle)
+    const down = (t) => -t.dx * Math.sin(rad) + t.dy * Math.cos(rad);
+    const across = (t) => t.dx * Math.cos(rad) + t.dy * Math.sin(rad);
+    let g = null;
+
+    const start = (e) => {
+      if (e.touches.length !== 1) return (g = null);
+      const t = e.touches[0];
+      const onHandle = !!e.target.closest(".sheet-grab, .sheet-title, .hm-head");
+      g = { x: t.clientX, y: t.clientY, t0: performance.now(), onHandle, dragging: false, decided: false, d: 0, last: [] };
+    };
+    const move = (e) => {
+      if (!g) return;
+      const t = e.touches[0];
+      const delta = { dx: t.clientX - g.x, dy: t.clientY - g.y };
+      const d = down(delta);
+      if (!g.decided) {
+        if (Math.abs(d) < 6 && Math.abs(across(delta)) < 6) return;
+        g.decided = true;
+        // pull down from the handle, or from content that's already at the top
+        g.dragging = d > 0 && Math.abs(d) > Math.abs(across(delta)) && (g.onHandle || el.scrollTop <= 0);
+        if (g.dragging) {
+          el.style.transition = "none";
+          document.activeElement && document.activeElement.blur && document.activeElement.blur();
+        }
+      }
+      if (!g.dragging) return;
+      if (e.cancelable) e.preventDefault(); // stop the content scrolling / page bouncing
+      g.d = Math.max(0, d);
+      g.last.push([performance.now(), g.d]);
+      if (g.last.length > 5) g.last.shift();
+      el.style.transform = `translateY(${g.d}px)`;
+    };
+    const end = () => {
+      if (!g || !g.dragging) return (g = null);
+      const [a, b] = [g.last[0], g.last[g.last.length - 1]];
+      const speed = a && b && b[0] > a[0] ? (b[1] - a[1]) / (b[0] - a[0]) : 0;
+      const quick = g.d > 30 && performance.now() - g.t0 < 250; // a short, fast flick
+      const close = g.d > DISMISS_PX || speed > DISMISS_SPEED || quick;
+      el.style.transition = "transform .18s ease-out";
+      el.style.transform = close ? "translateY(105%)" : "";
+      g = null;
+      if (close) setTimeout(() => closeRef.current && closeRef.current(), 160);
+      else setTimeout(() => (el.style.transition = ""), 200);
+    };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
+    el.addEventListener("touchend", end);
+    el.addEventListener("touchcancel", end);
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+    };
+  }, [angle]);
+}
+
+/** Bottom sheet. With `turn`, the sheet sits on the physical bottom edge of a turned phone. Swipe down to close. */
 export function Sheet({ onClose, children, turn = 0, label, class: cls = "" }) {
+  const panel = useRef(null);
+  useSwipeDismiss(panel, turn + rootTurn, onClose);
   const inner = html`
-    <div class=${"sheet " + cls} role="dialog" aria-modal="true" aria-label=${label}>
+    <div class=${"sheet " + cls} role="dialog" aria-modal="true" aria-label=${label} ref=${panel}>
       <div class="sheet-grab" aria-hidden="true"></div>
       ${children}
     </div>`;

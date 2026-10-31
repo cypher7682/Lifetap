@@ -1,6 +1,6 @@
 import { html, render, useState, useEffect, useRef } from "../vendor/preact-htm.js";
 import * as store from "./store.js";
-import { Overlays } from "./ui.js";
+import { Overlays, setRootTurn } from "./ui.js";
 import { DashList } from "./screens/list.js";
 import { NewDash } from "./screens/newdash.js";
 import { DashScreen } from "./screens/dash.js";
@@ -41,6 +41,7 @@ function useAutoTurn() {
 function App() {
   useStore();
   const auto = useAutoTurn();
+  setRootTurn(-auto.turn);
   const [stack, setStack] = useState(() => {
     const s = [{ name: "list" }];
     const last = localStorage.getItem(LAST_KEY);
