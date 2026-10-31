@@ -108,7 +108,7 @@ function ToggleBox({ cell, turn, onFlip }) {
       <div class="tc" style=${{ "--n": cell.toggles.length, ...(turn ? { "--turn": turn + "deg" } : {}) }}>
         ${cell.toggles.map((t) => html`
           <button key=${t.id} class=${"tgl" + (t.value ? " on" : "")} aria-pressed=${!!t.value} aria-label=${`${t.name}, ${t.value ? "on" : "off"}`} onClick=${() => onFlip(t)}>
-            <span class="tgl-name">${t.name}</span>
+            <span class="tgl-name">${t.triggers && t.triggers.length > 0 && html`<${Icon} name="lightning" size=${13} class="tgl-trig" />`}${t.name}</span>
           </button>`)}
       </div>
     </div>`;
@@ -272,6 +272,22 @@ function HowMany({ kind, tile, macro, dir, turn, onDone, onClose }) {
 
 // ---------------------------------------------------------------- edit-mode sheets
 
+/** Triggers section for a counter or a toggle. */
+function TriggerList({ triggers = [], whenLabels, onOpen, onAdd, onDelete, addLabel = "Add trigger" }) {
+  return html`
+    ${triggers.map((tr) => html`
+      <div class="trig-row" key=${tr.id}>
+        <button class="trig-main" onClick=${() => onOpen(tr.id)}>
+          <span class="trig-icon"><${Icon} name="lightning" size=${18} /></span>
+          <span class="trig-text"><b>When it ${whenLabels[tr.when]}</b>
+            <span class="muted small">${tr.steps.length} step${tr.steps.length === 1 ? "" : "s"}${whenLabels === E.TRIGGER_WHEN ? (tr.perPoint ? " · once per point" : " · once") : ""}</span></span>
+          <${Icon} name="pencil" size=${18} />
+        </button>
+        <button class="icon-btn step-del" aria-label="Delete trigger" onClick=${() => onDelete(tr.id)}><${Icon} name="x" size=${20} /></button>
+      </div>`)}
+    <button class="btn btn-dashed btn-block" onClick=${onAdd}><${Icon} name="plus" size=${20} />${addLabel}</button>`;
+}
+
 function EditTileSheet({ dash, index, onClose, onRemove, onGrid, onTrigger, onAddTrigger, onDeleteTrigger }) {
   const tile = E.view(dash).cells[index];
   if (!tile) return null;
@@ -299,17 +315,7 @@ function EditTileSheet({ dash, index, onClose, onRemove, onGrid, onTrigger, onAd
         <span><b>Allow negative</b><span class="muted small">Off: anything that would take this below 0 is rejected.</span></span>
       </label>
       <div class="field-label">Triggers · run automatically when this changes</div>
-      ${(tile.triggers || []).map((tr) => html`
-        <div class="trig-row" key=${tr.id}>
-          <button class="trig-main" onClick=${() => onTrigger(tr.id)}>
-            <span class="trig-icon"><${Icon} name="lightning" size=${18} /></span>
-            <span class="trig-text"><b>When it ${E.TRIGGER_WHEN[tr.when]}</b>
-              <span class="muted small">${tr.steps.length} step${tr.steps.length === 1 ? "" : "s"} · ${tr.perPoint ? "once per point" : "once"}</span></span>
-            <${Icon} name="pencil" size=${18} />
-          </button>
-          <button class="icon-btn step-del" aria-label="Delete trigger" onClick=${() => onDeleteTrigger(tr.id)}><${Icon} name="x" size=${20} /></button>
-        </div>`)}
-      <button class="btn btn-dashed btn-block" onClick=${onAddTrigger}><${Icon} name="plus" size=${20} />Add trigger</button>
+      <${TriggerList} triggers=${tile.triggers} whenLabels=${E.TRIGGER_WHEN} onOpen=${onTrigger} onAdd=${onAddTrigger} onDelete=${onDeleteTrigger} />
       <div class="field-label">Icon</div>
       <${IconPicker} value=${tile.icon} color=${tile.color} onChange=${(icon) => set({ icon })} />
       <div class="field-label">Colour</div>
@@ -321,7 +327,7 @@ function EditTileSheet({ dash, index, onClose, onRemove, onGrid, onTrigger, onAd
     <//>`;
 }
 
-function ToggleBoxSheet({ dash, index, onClose, onRemove }) {
+function ToggleBoxSheet({ dash, index, onClose, onRemove, onTrigger, onAddTrigger, onDeleteTrigger }) {
   const cell = E.view(dash).cells[index];
   if (!cell || cell.kind !== "toggles") return null;
   const setToggles = (fn) => store.update(dash.id, (d) => E.editDraft(d, (s) => E.updateCell(s, index, { toggles: fn(s.cells[index].toggles) })));
@@ -336,6 +342,10 @@ function ToggleBoxSheet({ dash, index, onClose, onRemove }) {
             onInput=${(e) => { const name = e.currentTarget.value; setToggles((ts) => ts.map((x) => (x.id === t.id ? { ...x, name } : x))); }}
             onBlur=${(e) => !e.currentTarget.value.trim() && setToggles((ts) => ts.map((x) => (x.id === t.id ? { ...x, name: "Toggle" } : x)))} />
           ${cell.toggles.length > 1 && html`<button class="icon-btn step-del" aria-label=${`Remove ${t.name}`} onClick=${() => setToggles((ts) => ts.filter((x) => x.id !== t.id))}><${Icon} name="x" size=${20} /></button>`}
+        </div>
+        <div class="tgl-trigs">
+          <${TriggerList} triggers=${t.triggers} whenLabels=${E.TOGGLE_TRIGGER_WHEN} addLabel=${`Add trigger to ${t.name || "this switch"}`}
+            onOpen=${(trId) => onTrigger(t.id, trId)} onAdd=${() => onAddTrigger(t.id)} onDelete=${(trId) => onDeleteTrigger(t.id, trId)} />
         </div>`)}
       ${cell.toggles.length < E.MAX_TOGGLES && html`
         <button class="btn btn-dashed btn-block add-gap" onClick=${() => setToggles((ts) => [...ts, { id: E.uid(), name: "Toggle " + (ts.length + 1), value: 0 }])}>
@@ -534,7 +544,9 @@ export function DashScreen({ id, nav, autoTurn }) {
   };
 
   const flip = (t) => {
-    commit(E.toggleEvent(t));
+    const r = E.toggleAction(E.view(store.get(id)), t);
+    if (!report(r, t.name)) return;
+    commit(r.event);
     if (recRef.current) setRec((rr) => ({ ...rr, toggled: { ...rr.toggled, [t.id]: t.value ? 0 : 1 } }));
   };
 
@@ -879,7 +891,18 @@ export function DashScreen({ id, nav, autoTurn }) {
           </div>
         <//>`;
     } else if (sheet.type === "togglecell") {
-      sheetEl = html`<${ToggleBoxSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)} />`;
+      const setToggleTriggers = (st, toggleId, fn) => E.updateCell(st, sheet.index, {
+        toggles: st.cells[sheet.index].toggles.map((x) => (x.id === toggleId ? { ...x, triggers: fn(x.triggers || []) } : x)),
+      });
+      sheetEl = html`<${ToggleBoxSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)}
+        onTrigger=${(toggleId, triggerId) => { close(); nav.push({ name: "trigger", id, tileId: toggleId, triggerId }); }}
+        onAddTrigger=${(toggleId) => {
+          const tr = E.newTrigger("up");
+          store.update(id, (d) => E.editDraft(d, (st) => setToggleTriggers(st, toggleId, (trs) => [...trs, tr])));
+          close();
+          nav.push({ name: "trigger", id, tileId: toggleId, triggerId: tr.id });
+        }}
+        onDeleteTrigger=${(toggleId, triggerId) => editWithUndo("Deleted trigger", (st) => setToggleTriggers(st, toggleId, (trs) => trs.filter((x) => x.id !== triggerId)))} />`;
     } else if (sheet.type === "varscell") {
       sheetEl = html`<${VarsBoxSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)}
         onNewVar=${() => setSheet({ type: "dvar", varId: null, thenBox: sheet.index })} />`;

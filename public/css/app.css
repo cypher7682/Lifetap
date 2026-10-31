@@ -624,3 +624,6 @@ h1, h2, p { margin: 0; }
 .trig-mark { color: var(--amber); display: inline-grid; place-items: center; }
 .lay-full .tile-head .trig-mark { position: absolute; top: 12px; left: 12px; }
 .var-chip.builtin { opacity: .75; border-style: dashed; display: inline-flex; align-items: center; }
+.tgl-trigs { margin: 8px 0 4px 14px; padding-left: 12px; border-left: 2px solid var(--line-2); }
+.tgl-trig { display: inline-block; vertical-align: -1px; margin-right: 4px; color: var(--amber); }
+.tgl.on .tgl-trig { color: #07200f; }

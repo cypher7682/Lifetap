@@ -187,14 +187,17 @@ export function duplicateDash(dash, name) {
     return r;
   };
   const remapStep = (st) => ({ target: remapRef(st.target), op: st.op, value: typeof st.value === "number" ? st.value : remapRef(st.value) });
+  const copyTrigger = (tr) => ({ ...tr, id: uid(), vars: tr.vars.map((v) => ({ ...v })), steps: tr.steps.map(remapStep) });
   const cells = src.cells.map((c) => {
     if (!c) return null;
     if (c.kind === "counter") {
       const out = { ...c, id: tileMap.get(c.id) };
-      if (c.triggers) out.triggers = c.triggers.map((tr) => ({ ...tr, id: uid(), vars: tr.vars.map((v) => ({ ...v })), steps: tr.steps.map(remapStep) }));
+      if (c.triggers) out.triggers = c.triggers.map(copyTrigger);
       return out;
     }
-    if (c.kind === "toggles") return { ...c, id: uid(), toggles: c.toggles.map((t) => ({ ...t, id: re(t.id) })) };
+    if (c.kind === "toggles") {
+      return { ...c, id: uid(), toggles: c.toggles.map((t) => ({ ...t, id: re(t.id), ...(t.triggers ? { triggers: t.triggers.map(copyTrigger) } : {}) })) };
+    }
     if (c.kind === "vars") return { ...c, id: uid(), show: c.show.map(re) };
     return { ...c, id: uid(), macroId: macroMap.get(c.macroId) };
   });
@@ -417,6 +420,7 @@ export function runMacro(s, macro, times = 1) {
   const ctx = {
     values: holderValues(s),
     tiles: new Map(counters(s).map((t) => [t.id, t])),
+    toggleObjs: new Map(toggles(s).map((t) => [t.id, t])),
     isToggle: new Set(toggles(s).map((t) => t.id)),
     broken: new Set(),
     divByZero: false,
@@ -472,7 +476,8 @@ function execSteps(ctx, macro, change) {
     const tile = ctx.tiles.get(id);
     if (tile && next < 0 && !tile.allowNegative) throw new Blocked({ tileId: id, name: tile.name, value: next });
     ctx.values.set(id, next);
-    if (tile && next !== prev) fireTriggers(ctx, tile, prev, next);
+    const owner = tile || ctx.toggleObjs.get(id);
+    if (owner && next !== prev) fireTriggers(ctx, owner, prev, next);
   }
 }
 
@@ -507,6 +512,14 @@ export function tapAction(s, tile, delta) {
 }
 
 export const TRIGGER_WHEN = { down: "goes down", up: "goes up", change: "changes" };
+export const TOGGLE_TRIGGER_WHEN = { down: "turns off", up: "turns on", change: "changes" };
+
+/** Flip a toggle, run through the macro engine so its triggers fire. */
+export function toggleAction(s, t) {
+  const to = t.value ? 0 : 1;
+  const r = runMacro(s, { vars: [], steps: [{ target: { kind: "toggle", toggleId: t.id }, op: "=", value: to }] }, 1);
+  return { ...r, event: makeEvent("tap", `${t.name} ${to ? "on" : "off"}`, r.changes) };
+}
 
 export function newTrigger(when = "down") {
   return { id: uid(), when, perPoint: false, vars: [], steps: [] };

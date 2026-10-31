@@ -140,7 +140,8 @@ export function MacroEditor({ id, macroId, tileId, triggerId, nav }) {
   const dash = store.get(id);
   const s = E.view(dash);
   const isTrigger = !!triggerId;
-  const owner = isTrigger ? E.findTile(s, tileId) : null;
+  const owner = isTrigger ? E.findTile(s, tileId) || E.findToggle(s, tileId) : null;
+  const ownerIsToggle = !!(owner && !E.findTile(s, tileId));
   const orig = isTrigger ? (owner && (owner.triggers || []).find((t) => t.id === triggerId)) || null : E.findMacro(s, macroId);
   const [m, setM] = useState(() => (orig ? withKeys(orig) : null));
   const [sheet, setSheet] = useState(null);
@@ -170,10 +171,14 @@ export function MacroEditor({ id, macroId, tileId, triggerId, nav }) {
     if (isTrigger) {
       const out = stripKeys(m);
       store.update(id, (d) => E.editDraft(d, (st) => {
-        const idx = st.cells.findIndex((c) => c && c.id === tileId);
+        const upsert = (trs = []) => (trs.some((t) => t.id === out.id) ? trs.map((t) => (t.id === out.id ? out : t)) : [...trs, out]);
+        const idx = st.cells.findIndex((c) => c && (c.id === tileId || (c.kind === "toggles" && c.toggles.some((t) => t.id === tileId))));
         if (idx < 0) return st;
-        const trs = st.cells[idx].triggers || [];
-        return E.updateCell(st, idx, { triggers: trs.some((t) => t.id === out.id) ? trs.map((t) => (t.id === out.id ? out : t)) : [...trs, out] });
+        const cell = st.cells[idx];
+        if (cell.kind === "toggles") {
+          return E.updateCell(st, idx, { toggles: cell.toggles.map((t) => (t.id === tileId ? { ...t, triggers: upsert(t.triggers) } : t)) });
+        }
+        return E.updateCell(st, idx, { triggers: upsert(cell.triggers) });
       }));
       toast("Trigger updated — tap Save on the dash to keep it");
       nav.forceBack();
@@ -258,12 +263,15 @@ export function MacroEditor({ id, macroId, tileId, triggerId, nav }) {
       <div class="scroll">
         ${isTrigger ? html`
           <div class="field-label">When ${owner ? owner.name : "this tile"}…</div>
-          <${Segmented} label="When" value=${m.when} options=${[{ value: "down", label: "Goes down" }, { value: "up", label: "Goes up" }, { value: "change", label: "Changes" }]} onChange=${(w) => set({ when: w })} />
+          ${ownerIsToggle
+            ? html`<${Segmented} label="When" value=${m.when} options=${[{ value: "up", label: "Turns on" }, { value: "down", label: "Turns off" }, { value: "change", label: "Changes" }]} onChange=${(w) => set({ when: w })} />
+              <p class="hint">Fires straight away when the switch flips, whether you tapped it or a macro set it. <span class="dvar-inline mono">$change</span> is 1.</p>`
+            : html`<${Segmented} label="When" value=${m.when} options=${[{ value: "down", label: "Goes down" }, { value: "up", label: "Goes up" }, { value: "change", label: "Changes" }]} onChange=${(w) => set({ when: w })} />
           <div class="field-label">Run</div>
           <${Segmented} label="Run" value=${m.perPoint} options=${[{ value: false, label: "Once" }, { value: true, label: "Once per point" }]} onChange=${(pp) => set({ perPoint: pp })} />
           <p class="hint">${m.perPoint
             ? html`Taking 3 off runs the steps 3 times, with <span class="dvar-inline mono">$change</span> = 1 each time.`
-            : html`Runs once, with <span class="dvar-inline mono">$change</span> = how much it moved (always positive). Fires straight away, even in the middle of a macro.`}</p>
+            : html`Runs once, with <span class="dvar-inline mono">$change</span> = how much it moved (always positive). Fires straight away, even in the middle of a macro.`}</p>`}
         ` : html`
           <div class="name-row">
             <button class="macro-icon-btn" aria-label="Change icon" onClick=${() => setSheet({ type: "icon" })}><${Icon} name=${m.icon} size=${26} /></button>

@@ -388,3 +388,28 @@ test("$change is a built-in inside triggers only", () => {
   assert.notEqual(c.cells[0].triggers[0].steps[0].target.tileId, "cmdr");
   assert.equal(c.cells[0].triggers[0].steps[0].target.tileId, c.cells[2].id);
 });
+
+test("toggle triggers fire on a flip and when a macro sets the toggle", () => {
+  const d = cmdrDash();
+  // Cmdr out turning on: @Cmdr casts + 1 ; turning off: Mana + 2
+  d.cells[1].toggles[0].triggers = [
+    { id: "on", when: "up", perPoint: false, vars: [], steps: [{ target: { kind: "dvar", varId: "casts" }, op: "+", value: { kind: "var", name: "change" } }] },
+    { id: "off", when: "down", perPoint: false, vars: [], steps: [{ target: tile("mana"), op: "+", value: 2 }] },
+  ];
+  let r = E.toggleAction(d, E.findToggle(d, "out"));
+  assert.deepEqual(Object.fromEntries(r.changes.map((c) => [c.tileId, c.to])), { out: 1, casts: 2 });
+  assert.equal(r.event.label, "Cmdr out on");
+  const on = E.commitEvent(d, r.event);
+  r = E.toggleAction(on, E.findToggle(on, "out"));
+  assert.deepEqual(Object.fromEntries(r.changes.map((c) => [c.tileId, c.to])), { out: 0, mana: 8 });
+  // setting it to what it already is doesn't fire
+  const same = E.runMacro(on, { vars: [], steps: [{ target: { kind: "toggle", toggleId: "out" }, op: "=", value: 5 }] });
+  assert.deepEqual(same.changes, []);
+  // the cast macro sets Cmdr out = 1 as its last step → the "on" trigger fires
+  const cast = E.runMacro(d, d.macros[0]);
+  assert.equal(Object.fromEntries(cast.changes.map((c) => [c.tileId, c.to])).casts, 3);
+  // duplicate keeps toggle triggers, with fresh ids
+  const c = E.duplicateDash(d, "copy");
+  assert.equal(c.cells[1].toggles[0].triggers.length, 2);
+  assert.notEqual(c.cells[1].toggles[0].triggers[0].id, "on");
+});
