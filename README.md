@@ -39,4 +39,7 @@ After a deploy, an installed copy picks up the new version the next time it's op
 - Horizontal view: automatic when the OS rotates to landscape on a touch device; manual setting in edit mode for rotation-locked phones.
 - Re-recording an existing macro asks for confirmation first, then replaces its steps when you tap Stop.
 - Tiles have an "Allow negative" setting (off by default). Any tap, take or macro step that would take a non-negative tile below 0 rejects the whole action with a splash; checked per step, so step order matters.
+- Dash variables (`@name`) belong to the whole dash and keep their value between macro runs (macro `$vars` reset every run). Reset / New game returns them to their starting value.
+- Toggle boxes hold one or two on/off switches; macros read them as 1/0 and setting one to anything non-zero turns it on. Recording captures a flipped switch as an `=` step.
+- Vars boxes show up to 4 dash variables. Display only; macros change the values.
 - Steps whose tile or variable has been removed are shown in red and skipped at run time, with a one-line warning.

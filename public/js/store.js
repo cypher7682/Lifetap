@@ -20,6 +20,13 @@ function openDb() {
   });
 }
 
+/** Fill in fields added after a dash was first saved. */
+function normalize(d) {
+  const out = { redo: [], turn: 0, draft: null, vars: [], ...d };
+  if (out.draft && !out.draft.vars) out.draft = { ...out.draft, vars: out.vars };
+  return out;
+}
+
 export async function load() {
   try {
     db = await openDb();
@@ -28,12 +35,12 @@ export async function load() {
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
-    for (const d of all) dashes.set(d.id, { redo: [], turn: 0, draft: null, ...d });
+    for (const d of all) dashes.set(d.id, normalize(d));
   } catch (e) {
     console.warn("IndexedDB unavailable, falling back to localStorage", e);
     db = null;
     const raw = localStorage.getItem(DB_NAME);
-    if (raw) for (const d of JSON.parse(raw)) dashes.set(d.id, d);
+    if (raw) for (const d of JSON.parse(raw)) dashes.set(d.id, normalize(d));
   }
   navigator.storage?.persist?.().catch(() => {});
   // flush pending writes before the page is hidden (iOS can kill PWAs abruptly)

@@ -213,3 +213,90 @@ test("tapBlocked", () => {
   assert.equal(E.tapBlocked(T("a", 0, "A", true), -1), null);
   assert.equal(E.newCounter(0).allowNegative, false);
 });
+
+// ---------------------------------------------------------------- toggles & dash vars
+
+function cmdrDash() {
+  let d = E.createDash({ name: "Cmdr", count: 1, grid: { cols: 2, rows: 2 } });
+  const mana = { ...d.cells[0], id: "mana", name: "Mana", value: 6 };
+  const box = { kind: "toggles", id: "tb", toggles: [{ id: "out", name: "Cmdr out", value: 0 }, { id: "out2", name: "Partner out", value: 0 }] };
+  const tax = { id: "tax", name: "Cmdr tax", initial: 0, value: 2 };
+  const casts = { id: "casts", name: "Cmdr casts", initial: 0, value: 1 };
+  const cast = {
+    id: "cast", name: "Cast cmdr", icon: "altar", repeats: false, vars: [],
+    steps: [
+      { target: tile("mana"), op: "-", value: 4 },
+      { target: tile("mana"), op: "-", value: { kind: "dvar", varId: "tax" } },
+      { target: { kind: "dvar", varId: "tax" }, op: "+", value: 2 },
+      { target: { kind: "dvar", varId: "casts" }, op: "+", value: 1 },
+      { target: { kind: "toggle", toggleId: "out" }, op: "=", value: 1 },
+    ],
+  };
+  return { ...d, cells: [mana, box, E.newVarsBox(["tax", "casts"]), null], vars: [tax, casts], macros: [cast] };
+}
+
+test("dash vars persist across runs; toggles read and write as 0/1", () => {
+  let d = cmdrDash();
+  let r = E.macroEvent(d, d.macros[0], 1);
+  assert.equal(r.blocked, null);
+  d = E.commitEvent(d, r.event);
+  assert.equal(E.findTile(d, "mana").value, 0);
+  assert.equal(E.findDashVar(d, "tax").value, 4);
+  assert.equal(E.findDashVar(d, "casts").value, 2);
+  assert.equal(E.findToggle(d, "out").value, 1);
+  // second cast can't be afforded: 0 - 4 → blocked, nothing changes
+  r = E.macroEvent(d, d.macros[0], 1);
+  assert.equal(r.blocked.name, "Mana");
+  // undo restores counters, vars and toggles in one go
+  d = E.undo(d);
+  assert.equal(E.findTile(d, "mana").value, 6);
+  assert.equal(E.findDashVar(d, "tax").value, 2);
+  assert.equal(E.findToggle(d, "out").value, 0);
+});
+
+test("toggle writes clamp to 0/1 and toggles can be a value source", () => {
+  const d = cmdrDash();
+  const mac = { vars: [{ name: "x", initial: 0 }], steps: [
+    { target: { kind: "toggle", toggleId: "out2" }, op: "+", value: 5 },
+    { target: { kind: "var", name: "x" }, op: "=", value: { kind: "toggle", toggleId: "out2" } },
+    { target: tile("mana"), op: "+", value: { kind: "var", name: "x" } },
+  ] };
+  const ch = Object.fromEntries(E.runMacro(d, mac).changes.map((c) => [c.tileId, c.to]));
+  assert.deepEqual(ch, { out2: 1, mana: 7 });
+});
+
+test("toggleEvent, reset, delete var, duplicate", () => {
+  let d = cmdrDash();
+  d = E.commitEvent(d, E.toggleEvent(E.findToggle(d, "out")));
+  assert.equal(E.findToggle(d, "out").value, 1);
+  assert.equal(d.log[0].label, "Cmdr out on");
+  d = E.resetDash(d);
+  assert.equal(E.findToggle(d, "out").value, 0);
+  assert.equal(E.findDashVar(d, "tax").value, 0);
+  const s = E.deleteDashVar(E.structureOf(d), "tax");
+  assert.deepEqual(s.cells[2].show, ["casts"]);
+  assert.equal(E.stepBroken(s, d.macros[0], d.macros[0].steps[1]), true);
+  assert.equal(E.refLabel(s, { kind: "dvar", varId: "tax" }), "Var removed");
+  const c = E.duplicateDash(cmdrDash(), "Copy");
+  assert.equal(E.runMacro(c, c.macros[0]).changes.length, 4);
+  assert.notEqual(c.vars[0].id, "tax");
+  assert.equal(c.cells[2].show[0], c.vars[0].id);
+});
+
+test("recording captures toggle flips as = steps", () => {
+  const d = cmdrDash();
+  const start = Object.fromEntries(E.holderValues(d));
+  const after = E.commitEvent(d, E.toggleEvent(E.findToggle(d, "out")));
+  assert.deepEqual(E.recordingSteps(after, start), [{ target: { kind: "toggle", toggleId: "out" }, op: "=", value: 1 }]);
+});
+
+test("draft vars: new var lives in draft, values write through", () => {
+  let d = cmdrDash();
+  d = E.editDraft(d, (s) => E.upsertDashVar(s, { id: "new", name: "Storm", initial: 3 }));
+  assert.equal(E.findDashVar(E.view(d), "new").value, 3);
+  assert.equal(E.findDashVar(d, "new"), null);
+  d = E.commitEvent(d, E.makeEvent("macro", "x", [{ tileId: "tax", from: 2, to: 9 }]));
+  assert.equal(E.findDashVar(d, "tax").value, 9);
+  assert.equal(E.findDashVar(E.view(d), "tax").value, 9);
+  assert.equal(E.findDashVar(E.saveDraft(d), "new").value, 3);
+});

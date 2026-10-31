@@ -51,8 +51,11 @@ export function view(dash) {
 }
 
 export function structureOf(d) {
-  return { grid: d.grid, cells: d.cells, bar: d.bar, macros: d.macros };
+  return { grid: d.grid, cells: d.cells, bar: d.bar, macros: d.macros, vars: d.vars || [] };
 }
+
+export const MAX_TOGGLES = 2;
+export const MAX_BOX_VARS = 4;
 
 export function counters(s) {
   return s.cells.filter((c) => c && c.kind === "counter");
@@ -60,6 +63,45 @@ export function counters(s) {
 
 export function findTile(s, tileId) {
   return s.cells.find((c) => c && c.kind === "counter" && c.id === tileId) || null;
+}
+
+/** Every on/off switch in the grid (toggle boxes hold one or two). */
+export function toggles(s) {
+  return s.cells.flatMap((c) => (c && c.kind === "toggles" ? c.toggles : []));
+}
+
+export function findToggle(s, id) {
+  return toggles(s).find((t) => t.id === id) || null;
+}
+
+/** Dash-wide variables: [{ id, name, initial, value }]. Values persist between macro runs. */
+export function dashVars(s) {
+  return s.vars || [];
+}
+
+export function findDashVar(s, id) {
+  return dashVars(s).find((v) => v.id === id) || null;
+}
+
+/**
+ * Everything with a persistent value, keyed by id: counters, toggles (0/1) and
+ * dash vars. Undo events and macro runs work over this one map.
+ */
+export function holderValues(s) {
+  const m = new Map();
+  for (const t of counters(s)) m.set(t.id, t.value);
+  for (const t of toggles(s)) m.set(t.id, t.value ? 1 : 0);
+  for (const v of dashVars(s)) m.set(v.id, v.value);
+  return m;
+}
+
+/** The id of the persistent value a ref points at, or null for a per-run $var. */
+export function holderId(ref) {
+  if (!ref) return null;
+  if (ref.kind === "tile") return ref.tileId;
+  if (ref.kind === "toggle") return ref.toggleId;
+  if (ref.kind === "dvar") return ref.varId;
+  return null;
 }
 
 export function findMacro(s, macroId) {
@@ -88,6 +130,14 @@ export function newCounter(i, overrides = {}) {
   };
 }
 
+export function newToggleBox(names = ["Toggle"]) {
+  return { kind: "toggles", id: uid(), toggles: names.map((name) => ({ id: uid(), name, value: 0 })) };
+}
+
+export function newVarsBox(show = []) {
+  return { kind: "vars", id: uid(), show: show.slice(0, MAX_BOX_VARS) };
+}
+
 export function newMacro(name, overrides = {}) {
   return { id: uid(), name, icon: "altar", repeats: false, vars: [], steps: [], ...overrides };
 }
@@ -107,6 +157,7 @@ export function createDash({ name, count, grid, index = 0 }) {
     cells,
     bar: Array(BAR_SLOTS).fill(null),
     macros: [],
+    vars: [],
     log: [],
     redo: [],
     turn: 0,
@@ -119,14 +170,25 @@ export function createDash({ name, count, grid, index = 0 }) {
 /** Deep copy with fresh ids everywhere (tiles, macros, refs remapped). */
 export function duplicateDash(dash, name) {
   const src = view(dash);
-  const tileMap = new Map();
+  const tileMap = new Map(); // counters, toggles and dash vars
   const macroMap = new Map();
   for (const c of src.cells) if (c && c.kind === "counter") tileMap.set(c.id, uid());
+  for (const t of toggles(src)) tileMap.set(t.id, uid());
+  for (const v of dashVars(src)) tileMap.set(v.id, uid());
   for (const m of src.macros) macroMap.set(m.id, uid());
-  const remapRef = (r) => (r && r.kind === "tile" ? { ...r, tileId: tileMap.get(r.tileId) ?? r.tileId } : r);
+  const re = (id) => tileMap.get(id) ?? id;
+  const remapRef = (r) => {
+    if (!r) return r;
+    if (r.kind === "tile") return { ...r, tileId: re(r.tileId) };
+    if (r.kind === "toggle") return { ...r, toggleId: re(r.toggleId) };
+    if (r.kind === "dvar") return { ...r, varId: re(r.varId) };
+    return r;
+  };
   const cells = src.cells.map((c) => {
     if (!c) return null;
     if (c.kind === "counter") return { ...c, id: tileMap.get(c.id) };
+    if (c.kind === "toggles") return { ...c, id: uid(), toggles: c.toggles.map((t) => ({ ...t, id: re(t.id) })) };
+    if (c.kind === "vars") return { ...c, id: uid(), show: c.show.map(re) };
     return { ...c, id: uid(), macroId: macroMap.get(c.macroId) };
   });
   const macros = src.macros.map((m) => ({
@@ -148,6 +210,7 @@ export function duplicateDash(dash, name) {
     cells,
     bar: src.bar.map((id) => (id ? macroMap.get(id) : null)),
     macros,
+    vars: dashVars(src).map((v) => ({ ...v, id: re(v.id) })),
     log: [],
     redo: [],
     draft: null,
@@ -222,6 +285,25 @@ export function moveMacroToGrid(s, macroId) {
   return { ok: true, structure: { ...s, bar, cells } };
 }
 
+/** Add or update a dash var definition (name/initial); a new var starts at its initial value. */
+export function upsertDashVar(s, v) {
+  const vars = dashVars(s);
+  const cur = vars.find((x) => x.id === v.id);
+  return {
+    ...s,
+    vars: cur ? vars.map((x) => (x.id === v.id ? { ...x, name: v.name, initial: v.initial } : x)) : [...vars, { id: v.id || uid(), name: v.name, initial: v.initial, value: v.initial }],
+  };
+}
+
+/** Delete a dash var and drop it from every vars box. Macro steps using it become broken. */
+export function deleteDashVar(s, id) {
+  return {
+    ...s,
+    vars: dashVars(s).filter((v) => v.id !== id),
+    cells: s.cells.map((c) => (c && c.kind === "vars" && c.show.includes(id) ? { ...c, show: c.show.filter((x) => x !== id) } : c)),
+  };
+}
+
 /** Next unused "Macro N" name. */
 export function nextMacroName(s) {
   const used = new Set(s.macros.map((m) => m.name));
@@ -233,6 +315,8 @@ export function nextMacroName(s) {
 export function refBroken(s, macro, ref) {
   if (!ref || typeof ref !== "object") return false;
   if (ref.kind === "tile") return !findTile(s, ref.tileId);
+  if (ref.kind === "toggle") return !findToggle(s, ref.toggleId);
+  if (ref.kind === "dvar") return !findDashVar(s, ref.varId);
   if (ref.kind === "var") return !macro.vars.some((v) => v.name === ref.name);
   return true;
 }
@@ -244,6 +328,14 @@ export function stepBroken(s, macro, step) {
 export function refLabel(s, ref) {
   if (!ref) return "?";
   if (ref.kind === "var") return "$" + ref.name;
+  if (ref.kind === "dvar") {
+    const v = findDashVar(s, ref.varId);
+    return v ? "@" + v.name : "Var removed";
+  }
+  if (ref.kind === "toggle") {
+    const t = findToggle(s, ref.toggleId);
+    return t ? t.name : "Toggle removed";
+  }
   const t = findTile(s, ref.tileId);
   return t ? t.name : "Tile removed";
 }
@@ -278,21 +370,19 @@ function applyOp(cur, op, v) {
  * whole run is rejected: changes is empty and blocked = { tileId, name, value }.
  */
 export function runMacro(s, macro, times = 1) {
-  const values = new Map();
+  const values = holderValues(s);
   const noNeg = new Map();
-  for (const t of counters(s)) {
-    values.set(t.id, t.value);
-    if (!t.allowNegative) noNeg.set(t.id, t.name);
-  }
+  for (const t of counters(s)) if (!t.allowNegative) noNeg.set(t.id, t.name);
+  const isToggle = new Set(toggles(s).map((t) => t.id));
   const before = new Map(values);
   let skippedBroken = 0;
   let divByZero = false;
 
   for (let run = 0; run < times; run++) {
     const vars = new Map(macro.vars.map((v) => [v.name, toInt(v.initial)]));
-    const read = (ref) => (ref.kind === "tile" ? values.get(ref.tileId) : vars.get(ref.name));
-    const write = (ref, v) => (ref.kind === "tile" ? values.set(ref.tileId, v) : vars.set(ref.name, v));
-    const has = (ref) => ref && (ref.kind === "tile" ? values.has(ref.tileId) : vars.has(ref.name));
+    const read = (ref) => (ref.kind === "var" ? vars.get(ref.name) : values.get(holderId(ref)));
+    const write = (ref, v) => (ref.kind === "var" ? vars.set(ref.name, v) : values.set(holderId(ref), isToggle.has(holderId(ref)) ? (v !== 0 ? 1 : 0) : v));
+    const has = (ref) => ref && (ref.kind === "var" ? vars.has(ref.name) : values.has(holderId(ref)));
 
     for (const step of macro.steps) {
       const literal = typeof step.value === "number";
@@ -306,7 +396,7 @@ export function runMacro(s, macro, times = 1) {
         continue;
       }
       const next = applyOp(read(step.target), step.op, v);
-      if (step.target.kind === "tile" && next < 0 && noNeg.has(step.target.tileId)) {
+      if (next < 0 && noNeg.has(holderId(step.target))) {
         const blocked = { tileId: step.target.tileId, name: noNeg.get(step.target.tileId), value: next };
         return { changes: [], skippedBroken, divByZero, blocked };
       }
@@ -341,6 +431,11 @@ export function recordingSteps(s, startValues) {
     if (d === 0) continue;
     steps.push({ target: { kind: "tile", tileId: t.id }, op: d > 0 ? "+" : "-", value: Math.abs(d) });
   }
+  for (const t of toggles(s)) {
+    if (t.id in startValues && (t.value ? 1 : 0) !== startValues[t.id]) {
+      steps.push({ target: { kind: "toggle", toggleId: t.id }, op: "=", value: t.value ? 1 : 0 });
+    }
+  }
   return steps;
 }
 
@@ -353,15 +448,31 @@ function setValues(cells, map) {
       changed = true;
       return { ...c, value: map.get(c.id) };
     }
+    if (c && c.kind === "toggles" && c.toggles.some((t) => map.has(t.id) && t.value !== map.get(t.id))) {
+      changed = true;
+      return { ...c, toggles: c.toggles.map((t) => (map.has(t.id) ? { ...t, value: map.get(t.id) } : t)) };
+    }
     return c;
   });
   return changed ? out : cells;
 }
 
-/** Write values into both the saved structure and the pending draft. */
+function setVarValues(vars, map) {
+  if (!vars || !vars.some((v) => map.has(v.id) && v.value !== map.get(v.id))) return vars;
+  return vars.map((v) => (map.has(v.id) ? { ...v, value: map.get(v.id) } : v));
+}
+
+/**
+ * Write values (counters, toggles, dash vars — keyed by id) into both the saved
+ * structure and the pending draft.
+ */
 export function withValues(dash, map) {
   const next = { ...dash, cells: setValues(dash.cells, map) };
-  if (dash.draft) next.draft = { ...dash.draft, cells: setValues(dash.draft.cells, map) };
+  if (dash.vars) next.vars = setVarValues(dash.vars, map);
+  if (dash.draft) {
+    next.draft = { ...dash.draft, cells: setValues(dash.draft.cells, map) };
+    if (dash.draft.vars) next.draft.vars = setVarValues(dash.draft.vars, map);
+  }
   return next;
 }
 
@@ -401,17 +512,25 @@ export function tapEvent(tile, delta) {
   ]);
 }
 
+export function toggleEvent(t) {
+  const to = t.value ? 0 : 1;
+  return makeEvent("tap", `${t.name} ${to ? "on" : "off"}`, [{ tileId: t.id, from: t.value ? 1 : 0, to }]);
+}
+
 export function macroEvent(s, macro, times) {
   const r = runMacro(s, macro, times);
   const ev = makeEvent("macro", times > 1 ? `${macro.name} ×${times}` : macro.name, r.changes);
   return { ...r, event: ev };
 }
 
-/** Reset / New game: every counter back to start, history cleared. */
+/** Reset / New game: counters back to start, toggles off, dash vars to their initial value, history cleared. */
 export function resetDash(dash) {
   const map = new Map();
-  for (const t of counters(view(dash))) map.set(t.id, t.start);
-  for (const t of counters(dash)) map.set(t.id, t.start);
+  for (const s of [dash, view(dash)]) {
+    for (const t of counters(s)) map.set(t.id, t.start);
+    for (const t of toggles(s)) map.set(t.id, 0);
+    for (const v of dashVars(s)) map.set(v.id, v.initial);
+  }
   return { ...withValues(dash, map), log: [], redo: [] };
 }
 

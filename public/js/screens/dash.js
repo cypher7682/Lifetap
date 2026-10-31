@@ -4,6 +4,7 @@ import * as E from "../engine.js";
 import { Icon } from "../icons.js";
 import { usePress, Sheet, Popover, MenuItem, Segmented, IntInput, dialog, confirm, snack, toast, splash } from "../ui.js";
 import { IconPicker, ColorPicker, GridPicker } from "./pickers.js";
+import { VarSheet } from "./editor.js";
 
 // Edit mode survives a trip to the step editor and back.
 const session = new Map();
@@ -100,6 +101,38 @@ function MacroSlot({ macro, index, turn, state, hint, onRun, onHold, onEmptyHold
     </div>`;
 }
 
+function ToggleBox({ cell, turn, onFlip }) {
+  return html`
+    <div class=${"tile toggle-box" + (turn ? " turned" : "")}>
+      <div class="tc" style=${{ "--n": cell.toggles.length, ...(turn ? { "--turn": turn + "deg" } : {}) }}>
+        ${cell.toggles.map((t) => html`
+          <button key=${t.id} class=${"tgl" + (t.value ? " on" : "")} aria-pressed=${!!t.value} aria-label=${`${t.name}, ${t.value ? "on" : "off"}`} onClick=${() => onFlip(t)}>
+            <span class="tgl-in">
+              <span class="tgl-name">${t.name}</span>
+              <span class="tgl-switch" aria-hidden="true"><span class="tgl-knob"></span></span>
+              <span class="tgl-state" aria-hidden="true">${t.value ? "On" : "Off"}</span>
+            </span>
+          </button>`)}
+      </div>
+    </div>`;
+}
+
+function VarsBox({ cell, vars, turn }) {
+  const shown = cell.show.map((vid) => vars.find((x) => x.id === vid)).filter(Boolean);
+  return html`
+    <div class=${"tile vars-box" + (turn ? " turned" : "")} role="group" aria-label=${shown.map((x) => `${x.name} ${x.value}`).join(", ") || "Vars box"}>
+      <div class="tc" style=${{ "--n": Math.max(1, shown.length), ...(turn ? { "--turn": turn + "deg" } : {}) }}>
+        ${shown.length
+          ? shown.map((x) => html`
+            <div class="vb-row" key=${x.id}>
+              <span class="vb-name"><span class="vb-at">@</span>${x.name}</span>
+              <span class="vb-val" style=${{ "--len": fmt(x.value).length }}>${fmt(x.value)}</span>
+            </div>`)
+          : html`<div class="vb-empty">No variables picked. Choose some in edit mode.</div>`}
+      </div>
+    </div>`;
+}
+
 // ---------------------------------------------------------------- how-many sheet
 
 function HowMany({ kind, tile, macro, dir, turn, onDone, onClose }) {
@@ -179,6 +212,67 @@ function EditTileSheet({ dash, index, onClose, onRemove, onGrid }) {
       <div class="sheet-row">
         <button class="btn btn-danger-soft" onClick=${onRemove}>Remove tile</button>
         <button class="btn btn-plain" onClick=${onGrid}>Change grid</button>
+      </div>
+    <//>`;
+}
+
+function ToggleBoxSheet({ dash, index, onClose, onRemove }) {
+  const cell = E.view(dash).cells[index];
+  if (!cell || cell.kind !== "toggles") return null;
+  const setToggles = (fn) => store.update(dash.id, (d) => E.editDraft(d, (s) => E.updateCell(s, index, { toggles: fn(s.cells[index].toggles) })));
+  return html`
+    <${Sheet} onClose=${onClose} label="Toggle box">
+      <h2 class="sheet-title">Toggle box</h2>
+      <p class="hint">Each switch reads as 1 when on and 0 when off, so macros can use it in maths or set it.</p>
+      ${cell.toggles.map((t, i) => html`
+        <label class="field-label" for=${"tg" + i}>Switch ${i + 1}</label>
+        <div class="row-2 center-row">
+          <input id=${"tg" + i} class="input grow" value=${t.name} maxlength="24"
+            onInput=${(e) => { const name = e.currentTarget.value; setToggles((ts) => ts.map((x) => (x.id === t.id ? { ...x, name } : x))); }}
+            onBlur=${(e) => !e.currentTarget.value.trim() && setToggles((ts) => ts.map((x) => (x.id === t.id ? { ...x, name: "Toggle" } : x)))} />
+          ${cell.toggles.length > 1 && html`<button class="icon-btn step-del" aria-label=${`Remove ${t.name}`} onClick=${() => setToggles((ts) => ts.filter((x) => x.id !== t.id))}><${Icon} name="x" size=${20} /></button>`}
+        </div>`)}
+      ${cell.toggles.length < E.MAX_TOGGLES && html`
+        <button class="btn btn-dashed btn-block add-gap" onClick=${() => setToggles((ts) => [...ts, { id: E.uid(), name: "Toggle " + (ts.length + 1), value: 0 }])}>
+          <${Icon} name="plus" size=${20} />Add a second switch</button>`}
+      <div class="sheet-row">
+        <button class="btn btn-danger-soft" onClick=${onRemove}>Remove box</button>
+        <button class="btn btn-primary" onClick=${onClose}>Done</button>
+      </div>
+    <//>`;
+}
+
+function VarsBoxSheet({ dash, index, onClose, onRemove, onNewVar }) {
+  const v = E.view(dash);
+  const cell = v.cells[index];
+  if (!cell || cell.kind !== "vars") return null;
+  const vars = E.dashVars(v);
+  const full = cell.show.length >= E.MAX_BOX_VARS;
+  const flip = (vid, on) => store.update(dash.id, (d) => E.editDraft(d, (s) => {
+    const cur = s.cells[index].show;
+    const show = on ? (cur.includes(vid) || cur.length >= E.MAX_BOX_VARS ? cur : [...cur, vid]) : cur.filter((x) => x !== vid);
+    return E.updateCell(s, index, { show });
+  }));
+  return html`
+    <${Sheet} onClose=${onClose} label="Vars box">
+      <h2 class="sheet-title">Vars box</h2>
+      <p class="hint">Shows the current value of up to ${E.MAX_BOX_VARS} dash variables.</p>
+      ${vars.length
+        ? vars.map((x) => {
+            const on = cell.show.includes(x.id);
+            return html`
+              <label class=${"check-row" + (!on && full ? " disabled" : "")}>
+                <input type="checkbox" checked=${on} disabled=${!on && full} onChange=${(e) => flip(x.id, e.currentTarget.checked)} />
+                <span class="check-box" aria-hidden="true"><${Icon} name="check" size=${18} /></span>
+                <span><b><span class="vb-at">@</span>${x.name}</b><span class="muted small">Now ${fmt(x.value)} · starts at ${fmt(x.initial)}</span></span>
+              </label>`;
+          })
+        : html`<p class="hint">This dash has no variables yet.</p>`}
+      ${full && html`<p class="hint">That's the maximum of ${E.MAX_BOX_VARS}. Untick one to swap it.</p>`}
+      <button class="btn btn-dashed btn-block add-gap" onClick=${onNewVar}><${Icon} name="plus" size=${20} />New dash variable</button>
+      <div class="sheet-row">
+        <button class="btn btn-danger-soft" onClick=${onRemove}>Remove box</button>
+        <button class="btn btn-primary" onClick=${onClose}>Done</button>
       </div>
     <//>`;
 }
@@ -349,8 +443,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     }
     const d = store.get(id);
     const s = E.view(d);
-    const start = {};
-    for (const t of E.counters(s)) start[t.id] = t.value;
+    const start = Object.fromEntries(E.holderValues(s));
     setMode("play");
     setBadges({});
     setRec({ target, start, logLen: d.log.length, redo: d.redo, taps: 0 });
@@ -450,6 +543,20 @@ export function DashScreen({ id, nav, autoTurn }) {
     setSheet({ type: "newmacro", macroId: macro.id });
   };
 
+  const addBox = (index, kind) => {
+    const s0 = E.view(store.get(id));
+    const box = kind === "toggles"
+      ? E.newToggleBox([`Toggle ${E.toggles(s0).length + 1}`])
+      : E.newVarsBox(E.dashVars(s0).map((x) => x.id));
+    store.update(id, (d) => E.editDraft(d, (s) => {
+      const cells = s.cells.slice();
+      cells[index] = box;
+      return { ...s, cells };
+    }));
+    setSelected(index);
+    setSheet({ type: kind === "toggles" ? "togglecell" : "varscell", index });
+  };
+
   const addMacroSlot = (slot) => {
     const s0 = E.view(store.get(id));
     const macro = E.newMacro(E.nextMacroName(s0));
@@ -494,6 +601,10 @@ export function DashScreen({ id, nav, autoTurn }) {
         badge=${badges[cell.id]} rec=${rec ? cell.value - (rec.start[cell.id] ?? cell.value) : null}
         onStep=${step} onHold=${(tile, dir) => setSheet({ type: "howmany", kind: "tile", tileId: tile.id, dir })} />`;
     }
+    if (cell.kind === "toggles") {
+      return html`<${ToggleBox} key=${cell.id} cell=${cell} turn=${turn} onFlip=${(t) => commit(E.toggleEvent(t))} />`;
+    }
+    if (cell.kind === "vars") return html`<${VarsBox} key=${cell.id} cell=${cell} vars=${E.dashVars(v)} turn=${turn} />`;
     const m = E.findMacro(v, cell.macroId);
     if (!m) return html`<div class="cell-empty" key=${"e" + i}></div>`;
     const isRec = recTargetIsCell(cell);
@@ -503,8 +614,20 @@ export function DashScreen({ id, nav, autoTurn }) {
 
   const renderEditCell = (cell, i) => {
     if (!cell) {
-      return html`<button key=${"e" + i} class="tile edit-tile edit-empty" aria-label="Empty cell. Add a counter or macro." onClick=${() => setSheet({ type: "add", index: i })}>
+      return html`<button key=${"e" + i} class="tile edit-tile edit-empty" aria-label="Empty cell. Add a counter, macro, toggles or vars box." onClick=${() => setSheet({ type: "add", index: i })}>
         <${Icon} name="plus" size=${28} /></button>`;
+    }
+    if (cell.kind === "toggles" || cell.kind === "vars") {
+      const isT = cell.kind === "toggles";
+      const label = isT ? cell.toggles.map((t) => t.name).join(" · ")
+        : cell.show.map((vid) => E.findDashVar(v, vid)).filter(Boolean).map((x) => "@" + x.name).join(" · ") || "No vars picked";
+      return html`
+        <button key=${cell.id} class=${"tile edit-tile" + (selected === i ? " picked" : "")} aria-label=${`Edit ${isT ? "toggle box" : "vars box"}: ${label}`}
+          onClick=${() => { setSelected(i); setSheet({ type: isT ? "togglecell" : "varscell", index: i }); }}>
+          <span class=${isT ? "c-teal" : "c-amber"}><${Icon} name=${isT ? "toggle" : "vars"} size=${24} /></span>
+          <span class="edit-name">${label}</span>
+          <span class=${"edit-kind " + (isT ? "c-teal" : "c-amber")}>${isT ? "toggles" : "vars box"}</span>
+        </button>`;
     }
     const isMacro = cell.kind === "macro";
     const m = isMacro ? E.findMacro(v, cell.macroId) : null;
@@ -607,8 +730,34 @@ export function DashScreen({ id, nav, autoTurn }) {
           <div class="choice-row">
             <button class="choice" onClick=${() => addCounter(sheet.index)}><${Icon} name="hexplus" size=${30} /><b>Counter</b><span>A tile with − and +</span></button>
             <button class="choice choice-macro" onClick=${() => addMacroCell(sheet.index)}><${Icon} name="play" size=${30} /><b>Macro</b><span>A big ▶ button that runs steps</span></button>
+            <button class="choice" onClick=${() => addBox(sheet.index, "toggles")}><${Icon} name="toggle" size=${30} /><b>Toggles</b><span>One or two on/off switches</span></button>
+            <button class="choice choice-vars" onClick=${() => addBox(sheet.index, "vars")}><${Icon} name="vars" size=${30} /><b>Vars box</b><span>Shows up to 4 @variables</span></button>
           </div>
         <//>`;
+    } else if (sheet.type === "togglecell") {
+      sheetEl = html`<${ToggleBoxSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)} />`;
+    } else if (sheet.type === "varscell") {
+      sheetEl = html`<${VarsBoxSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)}
+        onNewVar=${() => setSheet({ type: "dvar", varId: null, thenBox: sheet.index })} />`;
+    } else if (sheet.type === "dvar") {
+      const cur = sheet.varId ? E.findDashVar(v, sheet.varId) : null;
+      const back = () => (sheet.thenBox != null ? setSheet({ type: "varscell", index: sheet.thenBox }) : close());
+      sheetEl = html`<${VarSheet} sigil="@" current=${cur} names=${E.dashVars(v).filter((x) => x !== cur).map((x) => x.name)}
+        hint="Keeps its value between macro runs. Goes back to this on Reset / New game."
+        onClose=${back}
+        onSave=${(name, initial) => {
+          const vid = cur ? cur.id : E.uid();
+          store.update(id, (d) => E.editDraft(d, (s) => {
+            let out = E.upsertDashVar(s, { id: vid, name, initial });
+            const bi = sheet.thenBox;
+            if (!cur && bi != null && out.cells[bi] && out.cells[bi].kind === "vars" && out.cells[bi].show.length < E.MAX_BOX_VARS) {
+              out = E.updateCell(out, bi, { show: [...out.cells[bi].show, vid] });
+            }
+            return out;
+          }));
+          back();
+        }}
+        onDelete=${() => { close(); editWithUndo(`Deleted @${cur.name}`, (s) => E.deleteDashVar(s, cur.id)); }} />`;
     } else if (sheet.type === "newmacro" || sheet.type === "macrocell" || sheet.type === "macroslot") {
       const m = E.findMacro(v, sheet.macroId);
       if (m) {
@@ -655,6 +804,12 @@ export function DashScreen({ id, nav, autoTurn }) {
                 </div>`;
               })}
             </div>
+            <div class="field-label">Dash variables · keep their value all game</div>
+            <div class="chips">
+              ${E.dashVars(v).map((x) => html`<button class="chip dvar-chip" onClick=${() => setSheet({ type: "dvar", varId: x.id })}>@${x.name} = ${fmt(x.initial)}</button>`)}
+              <button class="chip chip-new" onClick=${() => setSheet({ type: "dvar", varId: null })}>+ New var</button>
+            </div>
+            <p class="hint">Use them in any macro, e.g. commander tax. Show them on the dash with a Vars box.</p>
             <div class="field-label">Horizontal view</div>
             <${Segmented} label="Horizontal view" value=${dash.turn || 0}
               options=${[{ value: 0, label: "Upright" }, { value: 90, label: "Turned left" }, { value: -90, label: "Turned right" }]}
