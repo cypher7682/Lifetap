@@ -26,6 +26,8 @@ npm run serve            # http://localhost:8123 (SW works on localhost)
 ./scripts/deploy.sh      # build and publish on the tailnet
 ```
 
+Pushing to `main` on GitHub runs `.github/workflows/pages.yml`: tests, build, then publish to GitHub Pages (https://cypher7682.github.io/Lifetap/).
+
 After a deploy, an installed copy picks up the new version the next time it's opened (it may take a second launch on iOS).
 
 ## Notes on spec decisions
