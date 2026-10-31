@@ -107,11 +107,7 @@ function ToggleBox({ cell, turn, onFlip }) {
       <div class="tc" style=${{ "--n": cell.toggles.length, ...(turn ? { "--turn": turn + "deg" } : {}) }}>
         ${cell.toggles.map((t) => html`
           <button key=${t.id} class=${"tgl" + (t.value ? " on" : "")} aria-pressed=${!!t.value} aria-label=${`${t.name}, ${t.value ? "on" : "off"}`} onClick=${() => onFlip(t)}>
-            <span class="tgl-in">
-              <span class="tgl-name">${t.name}</span>
-              <span class="tgl-switch" aria-hidden="true"><span class="tgl-knob"></span></span>
-              <span class="tgl-state" aria-hidden="true">${t.value ? "On" : "Off"}</span>
-            </span>
+            <span class="tgl-name">${t.name}</span>
           </button>`)}
       </div>
     </div>`;
