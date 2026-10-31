@@ -1,4 +1,4 @@
-# Counter Dash
+# Lifetap
 
 A phone-first PWA for tracking lots of interacting counters during a game. Each **dash** is a grid of +/− counter tiles plus a bar of **macros**. A macro applies several steps in one tap.
 

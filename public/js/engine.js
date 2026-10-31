@@ -1,4 +1,4 @@
-// Pure data logic for Counter Dash. No DOM, no storage — everything here is
+// Pure data logic for Lifetap. No DOM, no storage — everything here is
 // unit-tested in tests/engine.test.mjs.
 
 export const ICONS = ["droplet", "hexplus", "person", "layers", "heart", "lightning", "skull", "spiral", "chest", "altar"];

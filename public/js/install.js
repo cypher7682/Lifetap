@@ -71,23 +71,23 @@ export function InstallSplash({ onClose }) {
     steps = html`
       <${Step} n="1">Tap <b>Share</b> <${Glyph} name="share" />${plat === "ios-other" ? " — it's in the address bar in Chrome" : " in Safari's toolbar"}</${Step}>
       <${Step} n="2">Scroll down and tap <b>Add to Home Screen</b> <${Glyph} name="addsquare" /></${Step}>
-      <${Step} n="3">Tap <b>Add</b>, then open Counter Dash from your home screen</${Step}>`;
+      <${Step} n="3">Tap <b>Add</b>, then open Lifetap from your home screen</${Step}>`;
   } else if (deferredPrompt) {
     steps = html`
       <${Step} n="1">Tap <b>Install</b> below</${Step}>
-      <${Step} n="2">Open Counter Dash from your home screen or app drawer</${Step}>`;
+      <${Step} n="2">Open Lifetap from your home screen or app drawer</${Step}>`;
   } else {
     steps = html`
       <${Step} n="1">Open your browser's menu <${Glyph} name="dotsv" /></${Step}>
       <${Step} n="2">Tap <b>Install app</b> or <b>Add to Home screen</b> <${Glyph} name="download" /></${Step}>
-      <${Step} n="3">Open Counter Dash from your home screen</${Step}>`;
+      <${Step} n="3">Open Lifetap from your home screen</${Step}>`;
   }
 
   return html`
     <div class="scrim inst-scrim" onClick=${(e) => e.target === e.currentTarget && close()}>
       <div class="inst-card" role="dialog" aria-modal="true" aria-labelledby="inst-title">
         <img class="inst-icon" src="icons/icon-192.png" alt="" width="76" height="76" />
-        <h2 id="inst-title">Put Counter Dash on your home screen</h2>
+        <h2 id="inst-title">Put Lifetap on your home screen</h2>
         <p class="inst-lede">It runs full-screen like a normal app and works with no signal once it's installed.</p>
         <ol class="inst-steps">${steps}</ol>
         <p class="inst-note"><${Icon} name="home" size=${16} /> Install before you build your dashes — the browser and the installed app keep separate data.</p>
