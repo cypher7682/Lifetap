@@ -58,9 +58,32 @@ function DashOptions({ dash, onClose }) {
     <//>`;
 }
 
+/** Screen measurements, for tracking down layout gaps on a particular phone. Tap the version line to show. */
+function ScreenInfo() {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)";
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  const safe = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].map((x) => parseFloat(x)).join(" / ");
+  probe.remove();
+  const root = document.querySelector(".root").getBoundingClientRect();
+  const rows = [
+    ["screen", `${screen.width} × ${screen.height}`],
+    ["window.inner", `${innerWidth} × ${innerHeight}`],
+    ["html client", `${document.documentElement.clientWidth} × ${document.documentElement.clientHeight}`],
+    ["visualViewport", window.visualViewport ? `${Math.round(visualViewport.width)} × ${Math.round(visualViewport.height)} @ ${Math.round(visualViewport.offsetTop)}` : "n/a"],
+    ["app box", `${Math.round(root.width)} × ${Math.round(root.height)} @ ${Math.round(root.top)}`],
+    ["safe areas (t/r/b/l)", safe],
+    ["installed", String(matchMedia("(display-mode: standalone)").matches || navigator.standalone === true)],
+    ["pixel ratio", String(devicePixelRatio)],
+  ];
+  return html`<div class="screen-info">${rows.map(([k, val]) => html`<div><span>${k}</span><b>${val}</b></div>`)}</div>`;
+}
+
 export function DashList({ nav }) {
   const dashes = store.list();
   const [opts, setOpts] = useState(null);
+  const [diag, setDiag] = useState(false);
   const offer = canOfferInstall();
   const [install, setInstall] = useState(() => offer && !installDismissed());
   return html`
@@ -76,7 +99,8 @@ export function DashList({ nav }) {
       </div>
       ${offer && !install && html`
         <button class="inst-again" onClick=${() => setInstall(true)}><${Icon} name="download" size=${18} />Install as an app</button>`}
-      <p class="app-version">Lifetap · version ${APP_VERSION}</p>
+      <button class="app-version" onClick=${() => setDiag((x) => !x)}>Lifetap · version ${APP_VERSION}</button>
+      ${diag && html`<${ScreenInfo} />`}
       ${opts && store.get(opts) && html`<${DashOptions} dash=${store.get(opts)} onClose=${() => setOpts(null)} />`}
       ${install && html`<${InstallSplash} onClose=${() => setInstall(false)} />`}
     </div>`;

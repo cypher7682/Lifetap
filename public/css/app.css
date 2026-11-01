@@ -708,4 +708,8 @@ h1, h2, p { margin: 0; }
 @container (max-height: 84px) { .half-glyph { display: none; } .tiny-info { inset: 3px 2px; gap: 0; } .tiny-name { font-size: 10px; } .tiny-name .ic { display: none; } }
 @container (max-height: 40px) { .tiny-name { display: none; } }
 
-.app-version { text-align: center; color: #5c616b; font-size: 12px; margin: 8px 0 calc(24px + var(--safe-bottom)); font-variant-numeric: tabular-nums; }
+.app-version { display: block; margin: 8px auto calc(24px + var(--safe-bottom)); min-height: 44px; padding: 0 16px; color: #5c616b; font-size: 12px; font-variant-numeric: tabular-nums; }
+.screen-info { margin: -16px 0 32px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; font-size: 13px; display: grid; gap: 4px; -webkit-user-select: text; user-select: text; }
+.screen-info div { display: flex; justify-content: space-between; gap: 12px; }
+.screen-info span { color: var(--muted); }
+.screen-info b { font-weight: 600; font-variant-numeric: tabular-nums; }
