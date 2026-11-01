@@ -35,7 +35,9 @@ function signed(n) {
 function CounterTile({ tile, layout, turn, badge, rec, onStep, onHold }) {
   const minus = usePress({ onTap: () => onStep(tile, -1), onLong: () => onHold(tile, -1) });
   const plus = usePress({ onTap: () => onStep(tile, 1), onLong: () => onHold(tile, 1) });
-  const lay = turn && layout !== "tiny" ? "row" : layout;
+  // Turned sideways, only the roomy full-size tiles have space for the one-line [−] n [+] row;
+  // narrower ones keep the compact stack (name, number, buttons), and 4+ wide stay tap-halves.
+  const lay = turn ? { full: "row", compact: "compact", row: "compact", tiny: "tiny" }[layout] : layout;
   const len = Math.max(1, fmt(tile.value).length);
   if (lay === "tiny") {
     // 4-wide grids: too narrow for side-by-side buttons, so the top half is + and the bottom half is −

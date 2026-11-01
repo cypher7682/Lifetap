@@ -272,7 +272,7 @@ h1, h2, p { margin: 0; }
 .lay-row .tile-name { font-size: 13.5px; }
 .lay-row .tile-body { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; }
 .lay-row .pm { width: min(56px, 26cqw); height: min(56px, 62cqh); min-height: 44px; min-width: 44px; }
-.lay-row .tile-val { font-size: min(52cqh, calc((100cqw - 140px) / (var(--len) * .62)), 64px); }
+.lay-row .tile-val { font-size: max(18px, min(52cqh, calc((100cqw - 140px) / (var(--len) * .62)), 64px)); }
 
 /* badges: top-right, clear of the icon */
 .badge {
