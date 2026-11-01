@@ -111,6 +111,13 @@ function App() {
   else if (top.name === "trigger" && store.get(top.id)) screenEl = html`<${MacroEditor} key=${top.triggerId} id=${top.id} tileId=${top.tileId} triggerId=${top.triggerId} nav=${nav} />`;
   else screenEl = html`<${DashList} nav=${nav} />`;
 
+  // Installed on iOS, the app can be given a viewport a status-bar's height short of the
+  // screen (e.g. 879 of 926). It then never reaches the home indicator, so the bottom
+  // safe-area margin is dead space: drop it.
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const shortViewport = standalone && !auto.turn && screen.height - auto.h >= 40;
+  document.documentElement.style.setProperty("--safe-bottom", shortViewport ? "0px" : "env(safe-area-inset-bottom, 0px)");
+
   const rootStyle = auto.turn
     ? { width: auto.h + "px", height: auto.w + "px", transform: `translate(-50%, -50%) rotate(${-auto.turn}deg)` }
     : null;
