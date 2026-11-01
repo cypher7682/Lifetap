@@ -3,15 +3,16 @@ import * as store from "../store.js";
 import * as E from "../engine.js";
 import { Icon } from "../icons.js";
 import { usePress, Sheet, Popover, MenuItem, Segmented, IntInput, dialog, confirm, snack, toast, splash, haptic } from "../ui.js";
-import { IconPicker, ColorPicker, GridPicker } from "./pickers.js";
+import { IconPicker, ColorPicker, GridSizer } from "./pickers.js";
 import { VarSheet } from "./editor.js";
 
 // Edit mode survives a trip to the step editor and back.
 const session = new Map();
 
 function layoutFor(grid) {
+  if (grid.cols >= 4) return "tiny";
   if (grid.cols === 3) return "compact";
-  if (grid.rows === 4) return "row";
+  if (grid.rows >= 4) return "row";
   return "full";
 }
 
@@ -34,8 +35,24 @@ function signed(n) {
 function CounterTile({ tile, layout, turn, badge, rec, onStep, onHold }) {
   const minus = usePress({ onTap: () => onStep(tile, -1), onLong: () => onHold(tile, -1) });
   const plus = usePress({ onTap: () => onStep(tile, 1), onLong: () => onHold(tile, 1) });
-  const lay = turn ? "row" : layout;
+  const lay = turn && layout !== "tiny" ? "row" : layout;
   const len = Math.max(1, fmt(tile.value).length);
+  if (lay === "tiny") {
+    // 4-wide grids: too narrow for side-by-side buttons, so the top half is + and the bottom half is −
+    return html`
+      <div class=${"tile counter-tile lay-tiny" + (turn ? " turned" : "")} role="group" aria-label=${`${tile.name}, ${tile.value}`}>
+        <div class="tc" style=${turn ? { "--turn": turn + "deg" } : null}>
+          <button class="half half-plus" aria-label=${`${tile.name} plus one. Hold to add more.`} ...${plus}><span class="half-glyph" aria-hidden="true">+</span></button>
+          <button class="half half-minus" aria-label=${`${tile.name} minus one. Hold to take more.`} ...${minus}><span class="half-glyph" aria-hidden="true">−</span></button>
+          <div class="tiny-info" aria-hidden="true">
+            <span class="tiny-name"><span class=${"c-" + tile.color}><${Icon} name=${tile.icon} size=${12} /></span>${tile.name}${tile.triggers && tile.triggers.length > 0 && html`<${Icon} name="lightning" size=${11} class="tgl-trig" />`}</span>
+            <span class="tile-val" style=${{ "--len": len }}>${fmt(tile.value)}</span>
+          </div>
+          ${rec != null && rec !== 0 && html`<span class="badge rec-badge">REC ${signed(rec)}</span>`}
+          ${rec == null && badge && html`<span key=${badge.k} class=${"badge delta-badge " + (badge.n < 0 ? "neg" : "pos")}>${signed(badge.n)}</span>`}
+        </div>
+      </div>`;
+  }
   return html`
     <div class=${`tile counter-tile lay-${lay}` + (turn ? " turned" : "")} role="group" aria-label=${`${tile.name}, ${tile.value}`}>
       <div class="tc" style=${turn ? { "--turn": turn + "deg" } : null}>
@@ -71,6 +88,29 @@ function MacroTile({ macro, turn, recording, inert, onRun, onHold, onStop }) {
             : html`<button class="play-btn" aria-label=${`Run ${macro.name}${macro.repeats ? ", asks how many times" : ""}. Hold for options.`} ...${press}><${Icon} name="play" size=${28} /></button>`}
         </div>
         <div class="macro-tile-foot">${recording ? "recording" : macro.repeats ? "asks ×N" : "once"}</div>
+      </div>
+    </div>`;
+}
+
+function MacroBoxButton({ macro, turn, recording, inert, onRun, onHold, onStop }) {
+  const press = usePress({ onTap: recording ? onStop : onRun, onLong: recording ? null : (el) => onHold(macro.id)(el), disabled: inert && !recording });
+  return html`
+    <button class=${"mbx" + (recording ? " rec" : "") + (inert && !recording ? " inert" : "")} ...${press}
+      aria-label=${recording ? "Stop recording" : `Run ${macro.name}${macro.repeats ? ", asks how many times" : ""}. Hold for options.`}>
+      ${recording ? html`<${Icon} name="stop" size=${18} />` : html`<${Icon} name=${macro.icon} size=${18} />`}
+      <span class="mbx-name">${macro.name}${macro.repeats ? " ×N" : ""}</span>
+    </button>`;
+}
+
+/** A grid tile holding several macros, stacked like a toggle box (2×2 when there are four). */
+function MacroBox({ macros, turn, recId, inert, onRun, onHold, onStop }) {
+  const n = macros.length;
+  const grid = n === 4 ? { "--cols": 2, "--rows": 2 } : { "--cols": 1, "--rows": n };
+  return html`
+    <div class=${"tile macro-tile macro-box" + (turn ? " turned" : "")}>
+      <div class="tc" data-n=${n} style=${{ ...grid, ...(turn ? { "--turn": turn + "deg" } : {}) }}>
+        ${macros.map((m) => html`<${MacroBoxButton} key=${m.id} macro=${m} turn=${turn} recording=${recId === m.id} inert=${inert}
+          onRun=${() => onRun(m.id)} onHold=${onHold} onStop=${onStop} />`)}
       </div>
     </div>`;
 }
@@ -395,42 +435,17 @@ function VarsBoxSheet({ dash, index, onClose, onRemove, onNewVar }) {
 function GridSheet({ dash, onClose }) {
   const v = E.view(dash);
   const used = v.cells.filter(Boolean).length;
-  const [msg, setMsg] = useState("");
   const pick = (g) => {
     const r = E.changeGrid(v, g);
-    if (!r.ok) {
-      setMsg(`Remove ${r.mustRemove} tile${r.mustRemove === 1 ? "" : "s"} first — that layout only fits ${E.gridCap(g)}.`);
-      return;
-    }
-    store.update(dash.id, (d) => E.editDraft(d, () => r.structure));
-    onClose();
+    if (r.ok) store.update(dash.id, (d) => E.editDraft(d, () => r.structure));
   };
   return html`
     <${Sheet} onClose=${onClose} label="Change grid">
       <h2 class="sheet-title">Change grid</h2>
       <p class="hint">${used} cell${used === 1 ? "" : "s"} in use. Tiles are never deleted by a grid change.</p>
-      <${GridPickerAll} value=${v.grid} used=${used} onChange=${pick} />
-      ${msg && html`<div class="field-err" role="alert">${msg}</div>`}
+      <${GridSizer} value=${v.grid} used=${used} onChange=${pick} />
+      <button class="btn btn-primary btn-block" onClick=${onClose}>Done</button>
     <//>`;
-}
-
-/** Like GridPicker but too-small layouts stay tappable so we can say why they're blocked. */
-function GridPickerAll({ value, used, onChange }) {
-  return html`
-    <div class="grid-picker" role="radiogroup" aria-label="Layout">
-      ${E.GRIDS.map((g) => {
-        const cap = E.gridCap(g);
-        const on = E.sameGrid(g, value);
-        return html`
-          <button role="radio" aria-checked=${on} class=${"grid-opt" + (on ? " on" : "") + (cap < used ? " small" : "")} onClick=${() => onChange(g)}>
-            <span class="grid-mini" style=${{ gridTemplateColumns: `repeat(${g.cols}, 1fr)` }}>
-              ${Array.from({ length: cap }, (_, i) => html`<span class=${i < used ? "used" : ""}></span>`)}
-            </span>
-            <span class="grid-name">${g.cols} × ${g.rows}</span>
-            <span class="grid-note">${cap < used ? `remove ${used - cap}` : cap > used ? `${cap - used} spare` : "full"}</span>
-          </button>`;
-      })}
-    </div>`;
 }
 
 // ---------------------------------------------------------------- screen
@@ -651,7 +666,7 @@ export function DashScreen({ id, nav, autoTurn }) {
 
   const removeCell = (index) => {
     const c = v.cells[index];
-    const name = c ? (c.kind === "counter" ? c.name : E.findMacro(v, c.macroId)?.name || "macro") : "";
+    const name = !c ? "" : c.kind === "counter" ? c.name : c.kind === "macro" ? E.cellMacroIds(c).map((mid) => E.findMacro(v, mid)?.name).filter(Boolean).join(", ") || "macro" : c.kind === "toggles" ? "toggle box" : "vars box";
     setSheet(null);
     setSelected(null);
     editWithUndo(`Removed “${name}”`, (s) => E.removeCell(s, index));
@@ -662,7 +677,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     setSheet(null);
     editWithUndo(`Removed “${m ? m.name : "macro"}”`, (s) => {
       const bar = s.bar.map((x) => (x === macroId ? null : x));
-      const onGrid = s.cells.some((c) => c && c.kind === "macro" && c.macroId === macroId);
+      const onGrid = s.cells.some((c) => E.cellMacroIds(c).includes(macroId));
       return { ...s, bar, macros: onGrid ? s.macros : s.macros.filter((mm) => mm.id !== macroId) };
     });
   };
@@ -683,7 +698,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     const macro = E.newMacro(E.nextMacroName(s0));
     store.update(id, (d) => E.editDraft(d, (s) => {
       const cells = s.cells.slice();
-      cells[index] = { kind: "macro", id: E.uid(), macroId: macro.id };
+      cells[index] = { kind: "macro", id: E.uid(), macroIds: [macro.id] };
       return { ...E.upsertMacro(s, macro), cells };
     }));
     setSheet({ type: "newmacro", macroId: macro.id });
@@ -701,6 +716,14 @@ export function DashScreen({ id, nav, autoTurn }) {
     }));
     setSelected(index);
     setSheet({ type: kind === "toggles" ? "togglecell" : "varscell", index });
+  };
+
+  const addMacroToTile = (index) => {
+    const s0 = E.view(store.get(id));
+    const macro = E.newMacro(E.nextMacroName(s0));
+    store.update(id, (d) => E.editDraft(d, (st) => E.addMacroToCell(E.upsertMacro(st, macro), index, macro.id)));
+    setSheet(null);
+    nav.push({ name: "macro", id, macroId: macro.id });
   };
 
   const addMacroSlot = (slot) => {
@@ -737,8 +760,8 @@ export function DashScreen({ id, nav, autoTurn }) {
   };
 
   // ---------- render helpers
-  const holdMacro = (macroId) => (el) => setSheet({ type: "hold", macroId, anchor: el.closest(".slot, .macro-tile") || el });
-  const recTargetIsCell = (cell) => rec && rec.target.macroId && cell.macroId === rec.target.macroId;
+  const holdMacro = (macroId) => (el) => setSheet({ type: "hold", macroId, anchor: el.closest(".slot, .mbx, .macro-tile") || el });
+  const recTargetIsCell = (cell) => rec && rec.target.macroId && E.cellMacroIds(cell).includes(rec.target.macroId);
 
   const renderPlayCell = (cell, i) => {
     if (!cell) return html`<div class="cell-empty" key=${"e" + i} aria-hidden="true"></div>`;
@@ -751,9 +774,14 @@ export function DashScreen({ id, nav, autoTurn }) {
       return html`<${ToggleBox} key=${cell.id} cell=${cell} turn=${turn} onFlip=${flip} />`;
     }
     if (cell.kind === "vars") return html`<${VarsBox} key=${cell.id} cell=${cell} vars=${E.dashVars(v)} turn=${turn} />`;
-    const m = E.findMacro(v, cell.macroId);
-    if (!m) return html`<div class="cell-empty" key=${"e" + i}></div>`;
+    const ms = E.cellMacroIds(cell).map((mid) => E.findMacro(v, mid)).filter(Boolean);
+    if (!ms.length) return html`<div class="cell-empty" key=${"e" + i}></div>`;
     const isRec = recTargetIsCell(cell);
+    if (ms.length > 1) {
+      return html`<${MacroBox} key=${cell.id} macros=${ms} turn=${turn} recId=${rec && rec.target.macroId} inert=${!!rec}
+        onRun=${tapMacro} onHold=${(mid) => holdMacro(mid)} onStop=${stopRecording} />`;
+    }
+    const m = ms[0];
     return html`<${MacroTile} key=${cell.id} macro=${m} turn=${turn} recording=${isRec} inert=${rec && !isRec}
       onRun=${() => tapMacro(m.id)} onHold=${holdMacro(m.id)} onStop=${stopRecording} />`;
   };
@@ -777,17 +805,21 @@ export function DashScreen({ id, nav, autoTurn }) {
         </button>`;
     }
     const isMacro = cell.kind === "macro";
-    const m = isMacro ? E.findMacro(v, cell.macroId) : null;
-    const name = isMacro ? (m ? m.name : "?") : cell.name;
+    const ms = isMacro ? E.cellMacroIds(cell).map((mid) => E.findMacro(v, mid)).filter(Boolean) : [];
+    const m = ms[0] || null;
+    const name = isMacro ? ms.map((x) => x.name).join(" · ") || "?" : cell.name;
     const icon = isMacro ? (m ? m.icon : "altar") : cell.icon;
     const color = isMacro ? "green" : cell.color;
-    const bind = slotDrag.bind({ zone: "cell", index: i }, () => { setSelected(i); setSheet(isMacro ? { type: "macrocell", macroId: cell.macroId, index: i } : { type: "tile", index: i }); });
+    const bind = slotDrag.bind({ zone: "cell", index: i }, () => {
+      setSelected(i);
+      setSheet(!isMacro ? { type: "tile", index: i } : ms.length > 1 ? { type: "macrobox", index: i } : { type: "macrocell", macroId: m && m.id, index: i });
+    });
     return html`
       <button key=${cell.id} ...${bind} class=${"tile edit-tile" + (isMacro ? " edit-macro" : "") + (selected === i ? " picked" : "") + bind.class}
         aria-label=${`Edit ${isMacro ? "macro" : "tile"} ${name}. Hold and drag to move.`}>
         <span class=${"c-" + color}><${Icon} name=${icon} size=${24} /></span>
         <span class="edit-name">${name}</span>
-        ${isMacro && html`<span class="edit-kind">macro</span>`}
+        ${isMacro && html`<span class="edit-kind">${ms.length > 1 ? `${ms.length} macros` : "macro"}</span>`}
       </button>`;
   };
 
@@ -826,10 +858,15 @@ export function DashScreen({ id, nav, autoTurn }) {
           <${Icon} name="save" size=${18} style=${turn ? { transform: `rotate(${turn}deg)` } : null} />Save</button>
       </header>`;
 
+  const { cols, rows } = v.grid;
+  // edit mode shows tiles as short labelled cards; smaller for denser grids
+  const editRowH = cols >= 4 ? 64 : cols === 3 ? (rows >= 5 ? 72 : 88) : rows >= 4 ? 80 : 104;
   const gridStyle = {
-    gridTemplateColumns: `repeat(${v.grid.cols}, minmax(0, 1fr))`,
-    gridTemplateRows: mode === "edit" ? null : `repeat(${v.grid.rows}, minmax(0, 1fr))`,
+    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+    gridTemplateRows: mode === "edit" ? null : `repeat(${rows}, minmax(0, 1fr))`,
+    gridAutoRows: mode === "edit" ? editRowH + "px" : null,
   };
+  const gridCls = `cols-${Math.min(cols, 4)}`;
 
   const slotState = (i) => (rec ? (rec.target.slot === i || (rec.target.macroId && v.bar[i] === rec.target.macroId) ? "recording" : "dim") : "idle");
 
@@ -890,6 +927,26 @@ export function DashScreen({ id, nav, autoTurn }) {
             <button class="choice choice-vars" onClick=${() => addBox(sheet.index, "vars")}><${Icon} name="vars" size=${30} /><b>Vars box</b><span>Shows up to 4 @variables</span></button>
           </div>
         <//>`;
+    } else if (sheet.type === "macrobox") {
+      const ms = E.cellMacroIds(v.cells[sheet.index]).map((mid) => E.findMacro(v, mid)).filter(Boolean);
+      sheetEl = html`
+        <${Sheet} onClose=${close} label="Macro tile">
+          <h2 class="sheet-title">Macro tile</h2>
+          <p class="hint">Up to ${E.MAX_CELL_MACROS} macros. Each one runs on a tap; hold one in play for Record / Edit / Delete.</p>
+          <div class="menu-list">
+            ${ms.map((m) => html`
+              <button class="menu-item macro-item" key=${m.id} onClick=${() => setSheet({ type: "macrocell", macroId: m.id, index: sheet.index })}>
+                <span class="c-green"><${Icon} name=${m.icon} size=${20} /></span>
+                <span class="grow">${m.name}</span>
+                <span class="muted small">${m.steps.length} step${m.steps.length === 1 ? "" : "s"}</span>
+              </button>`)}
+          </div>
+          ${ms.length < E.MAX_CELL_MACROS && html`<button class="btn btn-dashed btn-block add-gap" onClick=${() => addMacroToTile(sheet.index)}><${Icon} name="plus" size=${20} />Add a macro</button>`}
+          <div class="sheet-row">
+            <button class="btn btn-danger-soft" onClick=${() => removeCell(sheet.index)}>Remove tile</button>
+            <button class="btn btn-primary" onClick=${close}>Done</button>
+          </div>
+        <//>`;
     } else if (sheet.type === "togglecell") {
       const setToggleTriggers = (st, toggleId, fn) => E.updateCell(st, sheet.index, {
         toggles: st.cells[sheet.index].toggles.map((x) => (x.id === toggleId ? { ...x, triggers: fn(x.triggers || []) } : x)),
@@ -943,7 +1000,17 @@ export function DashScreen({ id, nav, autoTurn }) {
               ${sheet.type === "macroslot"
                 ? !onGrid && html`<${MenuItem} icon="grid" label="Move to grid" onClick=${() => moveMacro(m.id, "grid")} />`
                 : !onBar && html`<${MenuItem} icon="bar" label="Move to macro bar" onClick=${() => moveMacro(m.id, "bar")} />`}
-              <${MenuItem} icon="trash" kind="danger" label="Remove" onClick=${() => (sheet.type === "macroslot" ? removeFromBar(m.id) : removeCell(sheet.index ?? place.cell))} />
+              ${sheet.type !== "macroslot" && E.cellMacroIds(v.cells[sheet.index ?? place.cell]).length < E.MAX_CELL_MACROS && html`
+                <${MenuItem} icon="plus" label="Add another macro to this tile" onClick=${() => addMacroToTile(sheet.index ?? place.cell)} />`}
+              <${MenuItem} icon="trash" kind="danger" label=${sheet.type !== "macroslot" && E.cellMacroIds(v.cells[sheet.index ?? place.cell]).length > 1 ? "Remove from this tile" : "Remove"}
+                onClick=${() => {
+                  if (sheet.type === "macroslot") return removeFromBar(m.id);
+                  const idx = sheet.index ?? place.cell;
+                  if (E.cellMacroIds(v.cells[idx]).length > 1) {
+                    setSheet({ type: "macrobox", index: idx });
+                    editWithUndo(`Removed “${m.name}”`, (st) => E.removeMacroFromCell(st, idx, m.id));
+                  } else removeCell(idx);
+                }} />
             </div>
           <//>`;
       }
@@ -956,7 +1023,7 @@ export function DashScreen({ id, nav, autoTurn }) {
       ${mode === "edit"
         ? html`
           <div class="scroll edit-scroll">
-            <div class=${"grid edit-grid g-" + E.gridKey(v.grid)} style=${gridStyle}>${v.cells.map(renderEditCell)}</div>
+            <div class=${"grid edit-grid " + gridCls} style=${gridStyle}>${v.cells.map(renderEditCell)}</div>
             <button class="btn btn-plain btn-block btn-sm-gap" onClick=${() => setSheet({ type: "grid" })}><${Icon} name="grid" size=${20} />Change grid · ${v.grid.cols} × ${v.grid.rows}</button>
             <div class="field-label">Macro bar</div>
             <div class="macro-bar edit-bar">
@@ -985,7 +1052,7 @@ export function DashScreen({ id, nav, autoTurn }) {
             <p class="hint">For a rotation-locked phone held sideways during play. Tile contents turn; nothing moves. If your phone rotates the screen itself, this happens automatically.</p>
           </div>`
         : html`
-          <main class=${"grid play-grid g-" + E.gridKey(v.grid)} style=${gridStyle}>${v.cells.map(renderPlayCell)}</main>
+          <main class=${"grid play-grid " + gridCls} style=${gridStyle}>${v.cells.map(renderPlayCell)}</main>
           <nav class="macro-bar" aria-label="Macros">
             ${v.bar.map((mid, i) => html`<${MacroSlot} key=${i} index=${i} macro=${mid && E.findMacro(v, mid)} turn=${turn} state=${slotState(i)} hint=${i === v.bar.indexOf(null)}
               onRun=${() => tapMacro(mid)} onHold=${holdMacro(mid)} onEmptyHold=${() => startRecording({ slot: i })} onStop=${stopRecording} />`)}

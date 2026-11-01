@@ -5,13 +5,9 @@ export const ICONS = ["droplet", "hexplus", "person", "layers", "heart", "lightn
 // Every colour a tile or dash can use. New counters cycle through the first five.
 export const COLORS = ["teal", "purple", "green", "amber", "red", "blue", "orange", "pink", "grey"];
 const DEFAULT_COLORS = COLORS.slice(0, 5);
-export const GRIDS = [
-  { cols: 2, rows: 2 },
-  { cols: 2, rows: 3 },
-  { cols: 2, rows: 4 },
-  { cols: 3, rows: 3 },
-  { cols: 3, rows: 4 },
-];
+// Grids are any columns × rows within these limits.
+export const GRID_MAX = { cols: 5, rows: 8 };
+export const MAX_COUNTERS = GRID_MAX.cols * GRID_MAX.rows;
 export const OPS = ["+", "-", "*", "/", "="];
 export const OP_GLYPH = { "+": "+", "-": "−", "*": "×", "/": "÷", "=": "=" };
 // Undo history per dash. Effectively unlimited for a game (events are ~150 bytes).
@@ -28,13 +24,11 @@ export const gridCap = (g) => g.cols * g.rows;
 export const gridKey = (g) => `${g.cols}x${g.rows}`;
 export const sameGrid = (a, b) => a.cols === b.cols && a.rows === b.rows;
 
-/** Best-fit layout for a number of counters (spec §3). */
+/** Best-fit layout for a number of counters: the familiar sizes first, then 4- and 5-wide. */
 export function bestGrid(n) {
-  if (n <= 4) return GRIDS[0];
-  if (n <= 6) return GRIDS[1];
-  if (n <= 8) return GRIDS[2];
-  if (n <= 9) return GRIDS[3];
-  return GRIDS[4];
+  const fits = [[2, 2], [2, 3], [2, 4], [3, 3], [3, 4], [3, 5], [4, 5], [4, 6], [5, 6], [5, 7], [5, 8]];
+  const [cols, rows] = fits.find(([c, r]) => c * r >= n) || [GRID_MAX.cols, GRID_MAX.rows];
+  return { cols, rows };
 }
 
 export function toInt(v, fallback = 0) {
@@ -57,6 +51,15 @@ export function structureOf(d) {
 }
 
 export const MAX_TOGGLES = 2;
+export const MAX_CELL_MACROS = 4;
+
+/** Macro ids held by a macro tile (one big ▶, or a stack of up to MAX_CELL_MACROS). */
+export const cellMacroIds = (c) => (c && c.kind === "macro" ? c.macroIds || (c.macroId ? [c.macroId] : []) : []);
+const macroCell = (ids) => ({ kind: "macro", id: uid(), macroIds: ids });
+/** Older saves stored one macroId per tile. */
+export function normalizeCells(cells) {
+  return cells.map((c) => (c && c.kind === "macro" && !c.macroIds ? { kind: "macro", id: c.id, macroIds: cellMacroIds(c) } : c));
+}
 export const MAX_BOX_VARS = 4;
 
 export function counters(s) {
@@ -114,7 +117,7 @@ export function findMacro(s, macroId) {
 export function macroPlacements(s, macroId) {
   return {
     bar: s.bar.indexOf(macroId),
-    cell: s.cells.findIndex((c) => c && c.kind === "macro" && c.macroId === macroId),
+    cell: s.cells.findIndex((c) => cellMacroIds(c).includes(macroId)),
   };
 }
 
@@ -199,7 +202,7 @@ export function duplicateDash(dash, name) {
       return { ...c, id: uid(), toggles: c.toggles.map((t) => ({ ...t, id: re(t.id), ...(t.triggers ? { triggers: t.triggers.map(copyTrigger) } : {}) })) };
     }
     if (c.kind === "vars") return { ...c, id: uid(), show: c.show.map(re) };
-    return { ...c, id: uid(), macroId: macroMap.get(c.macroId) };
+    return macroCell(cellMacroIds(c).map((m) => macroMap.get(m)));
   });
   const macros = src.macros.map((m) => ({
     ...m,
@@ -240,17 +243,45 @@ export function changeGrid(s, grid) {
   return { ok: true, structure: { ...s, grid: { ...grid }, cells } };
 }
 
-/** Remove whatever is in a cell. Removing a macro tile deletes its macro unless it's also on the bar. */
+/** Drop macros that no longer appear anywhere (bar or grid). */
+function pruneMacros(s, candidates) {
+  const used = new Set([...s.bar.filter(Boolean), ...s.cells.flatMap(cellMacroIds)]);
+  const gone = new Set(candidates.filter((m) => !used.has(m)));
+  return gone.size ? { ...s, macros: s.macros.filter((m) => !gone.has(m.id)) } : s;
+}
+
+/** Remove whatever is in a cell. Removing a macro tile deletes its macros unless they're also on the bar. */
 export function removeCell(s, index) {
-  const cell = s.cells[index];
+  const ids = cellMacroIds(s.cells[index]);
   const cells = s.cells.slice();
   cells[index] = null;
-  let macros = s.macros;
-  if (cell && cell.kind === "macro" && !s.bar.includes(cell.macroId)) {
-    macros = macros.filter((m) => m.id !== cell.macroId);
-  }
-  return { ...s, cells, macros };
+  return pruneMacros({ ...s, cells }, ids);
 }
+
+/** Add a macro to a macro tile (up to MAX_CELL_MACROS). */
+export function addMacroToCell(s, index, macroId) {
+  const ids = cellMacroIds(s.cells[index]);
+  if (ids.length >= MAX_CELL_MACROS || ids.includes(macroId)) return s;
+  const cells = s.cells.slice();
+  cells[index] = { ...cells[index], macroIds: [...ids, macroId] };
+  return { ...s, cells };
+}
+
+/** Take one macro out of a macro tile; it's deleted unless it's also on the bar. Empty tiles become empty cells. */
+export function removeMacroFromCell(s, index, macroId) {
+  const ids = cellMacroIds(s.cells[index]).filter((m) => m !== macroId);
+  const cells = s.cells.slice();
+  cells[index] = ids.length ? { ...cells[index], macroIds: ids } : null;
+  return pruneMacros({ ...s, cells }, [macroId]);
+}
+
+const withoutMacro = (cells, macroId) =>
+  cells.map((c) => {
+    const ids = cellMacroIds(c);
+    if (!ids.includes(macroId)) return c;
+    const rest = ids.filter((m) => m !== macroId);
+    return rest.length ? { ...c, macroIds: rest } : null;
+  });
 
 /** Delete a macro everywhere it appears. */
 export function deleteMacro(s, macroId) {
@@ -258,7 +289,7 @@ export function deleteMacro(s, macroId) {
     ...s,
     macros: s.macros.filter((m) => m.id !== macroId),
     bar: s.bar.map((id) => (id === macroId ? null : id)),
-    cells: s.cells.map((c) => (c && c.kind === "macro" && c.macroId === macroId ? null : c)),
+    cells: withoutMacro(s.cells, macroId),
   };
 }
 
@@ -278,15 +309,14 @@ export function moveMacroToBar(s, macroId) {
   if (slot < 0) return { ok: false, reason: "The macro bar is full." };
   const bar = s.bar.slice();
   bar[slot] = macroId;
-  const cells = s.cells.map((c) => (c && c.kind === "macro" && c.macroId === macroId ? null : c));
-  return { ok: true, structure: { ...s, bar, cells } };
+  return { ok: true, structure: { ...s, bar, cells: withoutMacro(s.cells, macroId) } };
 }
 
 export function moveMacroToGrid(s, macroId) {
   const idx = s.cells.indexOf(null);
   if (idx < 0) return { ok: false, reason: "No empty grid cell. Remove a tile or change the grid first." };
   const cells = s.cells.slice();
-  cells[idx] = { kind: "macro", id: uid(), macroId };
+  cells[idx] = macroCell([macroId]);
   const bar = s.bar.map((id) => (id === macroId ? null : id));
   return { ok: true, structure: { ...s, bar, cells } };
 }
@@ -320,15 +350,17 @@ export function moveSlot(s, from, to) {
   if (from.zone === to.zone && from.index === to.index) return null;
   const cells = s.cells.slice();
   const bar = s.bar.slice();
-  const get = (p) => (p.zone === "cell" ? cells[p.index] : bar[p.index] ? { kind: "macro", macroId: bar[p.index] } : null);
+  const get = (p) => (p.zone === "cell" ? cells[p.index] : bar[p.index] ? { kind: "macro", macroIds: [bar[p.index]] } : null);
+  // only a single-macro tile fits in a bar slot
+  const fitsBar = (item) => !item || (item.kind === "macro" && cellMacroIds(item).length === 1);
   const a = get(from);
   const b = get(to);
   if (!a) return null;
-  if (to.zone === "bar" && a.kind !== "macro") return null;
-  if (from.zone === "bar" && b && b.kind !== "macro") return null;
+  if (to.zone === "bar" && !fitsBar(a)) return null;
+  if (from.zone === "bar" && !fitsBar(b)) return null;
   const put = (p, item) => {
-    if (p.zone === "bar") bar[p.index] = item ? item.macroId : null;
-    else cells[p.index] = !item ? null : item.id ? item : { kind: "macro", id: uid(), macroId: item.macroId };
+    if (p.zone === "bar") bar[p.index] = item ? cellMacroIds(item)[0] : null;
+    else cells[p.index] = !item ? null : item.id ? item : macroCell(cellMacroIds(item));
   };
   put(to, a);
   put(from, b);

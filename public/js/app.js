@@ -111,8 +111,14 @@ function App() {
   else if (top.name === "trigger" && store.get(top.id)) screenEl = html`<${MacroEditor} key=${top.triggerId} id=${top.id} tileId=${top.tileId} triggerId=${top.triggerId} nav=${nav} />`;
   else screenEl = html`<${DashList} nav=${nav} />`;
 
+  // iOS home-screen apps can lay the page out a status-bar's height short of the
+  // screen, leaving a dead strip at the bottom; when installed and upright, use the full screen.
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const short = standalone && auto.h > auto.w && screen.height > auto.h && screen.height - auto.h < 80;
   const rootStyle = auto.turn
     ? { width: auto.h + "px", height: auto.w + "px", transform: `translate(-50%, -50%) rotate(${-auto.turn}deg)` }
+    : short
+    ? { bottom: "auto", height: screen.height + "px" }
     : null;
 
   return html`

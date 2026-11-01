@@ -1,3 +1,4 @@
+import { normalizeCells } from "./engine.js";
 // In-memory dash store backed by IndexedDB. Every update persists the changed
 // dash (coalesced per animation frame) and notifies subscribers.
 
@@ -24,6 +25,8 @@ function openDb() {
 function normalize(d) {
   const out = { redo: [], turn: 0, draft: null, vars: [], ...d };
   if (out.draft && !out.draft.vars) out.draft = { ...out.draft, vars: out.vars };
+  out.cells = normalizeCells(out.cells);
+  if (out.draft) out.draft = { ...out.draft, cells: normalizeCells(out.draft.cells) };
   return out;
 }
 

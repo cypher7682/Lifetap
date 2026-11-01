@@ -2,7 +2,7 @@ import { html, useState } from "../../vendor/preact-htm.js";
 import * as store from "../store.js";
 import * as E from "../engine.js";
 import { Icon } from "../icons.js";
-import { GridPicker } from "./pickers.js";
+import { GridSizer } from "./pickers.js";
 
 export function NewDash({ nav }) {
   const [name, setName] = useState("");
@@ -12,7 +12,7 @@ export function NewDash({ nav }) {
   const err = tried && !name.trim();
 
   const setN = (n) => {
-    n = Math.max(1, Math.min(12, n));
+    n = Math.max(1, Math.min(E.MAX_COUNTERS, n));
     setCount(n);
     setGrid(E.bestGrid(n));
   };
@@ -46,11 +46,11 @@ export function NewDash({ nav }) {
         <div class="stepper">
           <button class="step-btn" aria-label="Fewer counters" disabled=${count <= 1} onClick=${() => setN(count - 1)}><${Icon} name="minus" size=${28} /></button>
           <span class="stepper-val" aria-live="polite">${count}</span>
-          <button class="step-btn" aria-label="More counters" disabled=${count >= 12} onClick=${() => setN(count + 1)}><${Icon} name="plus" size=${28} /></button>
+          <button class="step-btn" aria-label="More counters" disabled=${count >= E.MAX_COUNTERS} onClick=${() => setN(count + 1)}><${Icon} name="plus" size=${28} /></button>
         </div>
 
         <div class="field-label">Layout</div>
-        <${GridPicker} value=${grid} used=${count} best=${E.bestGrid(count)} onChange=${setGrid} />
+        <${GridSizer} value=${grid} used=${count} onChange=${setGrid} />
 
         <div class="field-label">Macro slots</div>
         <div class="slot-preview">

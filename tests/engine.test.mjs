@@ -26,7 +26,8 @@ function altarDash() {
 }
 
 test("bestGrid", () => {
-  assert.deepEqual([1, 4, 5, 6, 7, 8, 9, 10, 12].map((n) => E.gridKey(E.bestGrid(n))), ["2x2", "2x2", "2x3", "2x3", "2x4", "2x4", "3x3", "3x4", "3x4"]);
+  assert.deepEqual([1, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16, 20, 21, 24, 25, 40].map((n) => E.gridKey(E.bestGrid(n))),
+    ["2x2", "2x2", "2x3", "2x3", "2x4", "2x4", "3x3", "3x4", "3x4", "3x5", "3x5", "4x5", "4x5", "4x6", "4x6", "5x6", "5x8"]);
 });
 
 test("createDash", () => {
@@ -317,10 +318,10 @@ test("moveSlot: swap cells, move into empties, macros between grid and bar", () 
   // bar macro <-> macro tile swap
   r = E.moveSlot(s, slot(0), cell(3));
   assert.deepEqual(r.bar, ["m2", null, null, null]);
-  assert.equal(r.cells[3].macroId, "m1");
+  assert.deepEqual(E.cellMacroIds(r.cells[3]), ["m1"]);
   assert.ok(r.cells[3].id);
   // bar -> empty cell, bar -> bar
-  assert.equal(E.moveSlot(s, slot(0), cell(2)).cells[2].macroId, "m1");
+  assert.deepEqual(E.cellMacroIds(E.moveSlot(s, slot(0), cell(2)).cells[2]), ["m1"]);
   assert.deepEqual(E.moveSlot(s, slot(0), slot(3)).bar, [null, null, null, "m1"]);
 });
 
@@ -412,4 +413,43 @@ test("toggle triggers fire on a flip and when a macro sets the toggle", () => {
   const c = E.duplicateDash(d, "copy");
   assert.equal(c.cells[1].toggles[0].triggers.length, 2);
   assert.notEqual(c.cells[1].toggles[0].triggers[0].id, "on");
+});
+
+test("macro tiles hold several macros", () => {
+  const C = (id) => ({ kind: "counter", id, name: id, value: 0 });
+  let s = { cells: [C("a"), { kind: "macro", id: "mt", macroId: "m1" }, null, null], bar: [null, null, null, "m3"], macros: [{ id: "m1" }, { id: "m2" }, { id: "m3" }] };
+  s = { ...s, cells: E.normalizeCells(s.cells) };
+  assert.deepEqual(s.cells[1].macroIds, ["m1"]);
+  s = E.addMacroToCell(s, 1, "m2");
+  s = E.addMacroToCell(s, 1, "m3");
+  assert.deepEqual(E.cellMacroIds(s.cells[1]), ["m1", "m2", "m3"]);
+  for (const id of ["x1", "x2", "x3"]) s = E.addMacroToCell(s, 1, id);
+  assert.equal(E.cellMacroIds(s.cells[1]).length, E.MAX_CELL_MACROS);
+  assert.equal(E.macroPlacements(s, "m2").cell, 1);
+  // a multi-macro tile can't go on the bar
+  assert.equal(E.moveSlot(s, { zone: "cell", index: 1 }, { zone: "bar", index: 0 }), null);
+  assert.equal(E.moveSlot(s, { zone: "bar", index: 3 }, { zone: "cell", index: 1 }), null);
+  // removing one macro deletes it (not on the bar); m3 is on the bar so it survives
+  let r = E.removeMacroFromCell(s, 1, "m2");
+  assert.ok(!E.findMacro(r, "m2"));
+  r = E.removeMacroFromCell(r, 1, "m3");
+  assert.ok(E.findMacro(r, "m3"));
+  // deleting a macro shrinks the tile; removing the whole tile prunes its macros
+  r = E.deleteMacro(s, "m1");
+  assert.deepEqual(E.cellMacroIds(r.cells[1]), ["m2", "m3", "x1"]);
+  r = E.removeCell(s, 1);
+  assert.deepEqual(r.macros.map((m) => m.id), ["m3"]);
+  // a tile's last macro moving to the bar empties the cell
+  const one = { cells: [{ kind: "macro", id: "t", macroIds: ["m1"] }], bar: [null, null, null, null], macros: [{ id: "m1" }] };
+  assert.equal(E.moveMacroToBar(one, "m1").structure.cells[0], null);
+});
+
+test("custom grids: any size within limits, tiles never deleted", () => {
+  const d = E.createDash({ name: "X", count: 7, grid: { cols: 1, rows: 7 } });
+  assert.equal(d.cells.length, 7);
+  assert.deepEqual(E.changeGrid(d, { cols: 2, rows: 3 }), { ok: false, mustRemove: 1 });
+  const r = E.changeGrid(d, { cols: 5, rows: 2 });
+  assert.equal(r.structure.cells.length, 10);
+  assert.equal(E.counters(r.structure).length, 7);
+  assert.equal(E.MAX_COUNTERS, 40);
 });
