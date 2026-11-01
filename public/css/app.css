@@ -691,3 +691,19 @@ h1, h2, p { margin: 0; }
 /* notifications never block the tiles underneath; only their action button is tappable */
 .snack { pointer-events: none; }
 .snack-act { pointer-events: auto; }
+
+/* typed counter count on New dash */
+.stepper-input { width: 100%; min-width: 0; height: 64px; border: 0; background: transparent; text-align: center; font-size: 56px; font-weight: 680; padding: 0; }
+
+/* very dense grids (6+ columns or 9+ rows) */
+.play-grid.dense { --gap: 4px; padding: 0 6px 6px; }
+.edit-grid.dense { gap: 4px; }
+.dense .tile { border-radius: 12px; }
+.edit-grid.dense .edit-tile { padding: 2px; border-radius: 12px; }
+.edit-grid.dense .edit-tile .ic { width: 18px; height: 18px; }
+.edit-grid.dense .edit-kind { display: none; }
+.edit-grid.dense .edit-name { font-size: 10.5px; }
+/* tiny tiles shed their extras as they shrink */
+/* priority as they shrink: number, then name, then the +/− marks */
+@container (max-height: 84px) { .half-glyph { display: none; } .tiny-info { inset: 3px 2px; gap: 0; } .tiny-name { font-size: 10px; } .tiny-name .ic { display: none; } }
+@container (max-height: 40px) { .tiny-name { display: none; } }

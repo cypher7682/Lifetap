@@ -3,6 +3,7 @@ import * as store from "../store.js";
 import * as E from "../engine.js";
 import { Icon } from "../icons.js";
 import { GridSizer } from "./pickers.js";
+import { IntInput } from "../ui.js";
 
 export function NewDash({ nav }) {
   const [name, setName] = useState("");
@@ -45,7 +46,7 @@ export function NewDash({ nav }) {
         <div class="field-label">How many counters?</div>
         <div class="stepper">
           <button class="step-btn" aria-label="Fewer counters" disabled=${count <= 1} onClick=${() => setN(count - 1)}><${Icon} name="minus" size=${28} /></button>
-          <span class="stepper-val" aria-live="polite">${count}</span>
+          <${IntInput} class="stepper-val stepper-input" label="How many counters" value=${count} onChange=${setN} />
           <button class="step-btn" aria-label="More counters" disabled=${count >= E.MAX_COUNTERS} onClick=${() => setN(count + 1)}><${Icon} name="plus" size=${28} /></button>
         </div>
 

@@ -860,13 +860,13 @@ export function DashScreen({ id, nav, autoTurn }) {
 
   const { cols, rows } = v.grid;
   // edit mode shows tiles as short labelled cards; smaller for denser grids
-  const editRowH = cols >= 4 ? 64 : cols === 3 ? (rows >= 5 ? 72 : 88) : rows >= 4 ? 80 : 104;
+  const editRowH = cols >= 6 ? 54 : cols >= 4 ? 64 : cols === 3 ? (rows >= 5 ? 72 : 88) : rows >= 4 ? 80 : 104;
   const gridStyle = {
     gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
     gridTemplateRows: mode === "edit" ? null : `repeat(${rows}, minmax(0, 1fr))`,
     gridAutoRows: mode === "edit" ? editRowH + "px" : null,
   };
-  const gridCls = `cols-${Math.min(cols, 4)}`;
+  const gridCls = `cols-${Math.min(cols, 4)}` + (cols >= 6 || rows >= 9 ? " dense" : "");
 
   const slotState = (i) => (rec ? (rec.target.slot === i || (rec.target.macroId && v.bar[i] === rec.target.macroId) ? "recording" : "dim") : "idle");
 

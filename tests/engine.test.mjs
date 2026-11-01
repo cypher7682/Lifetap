@@ -26,8 +26,8 @@ function altarDash() {
 }
 
 test("bestGrid", () => {
-  assert.deepEqual([1, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16, 20, 21, 24, 25, 40].map((n) => E.gridKey(E.bestGrid(n))),
-    ["2x2", "2x2", "2x3", "2x3", "2x4", "2x4", "3x3", "3x4", "3x4", "3x5", "3x5", "4x5", "4x5", "4x6", "4x6", "5x6", "5x8"]);
+  assert.deepEqual([1, 4, 5, 6, 7, 8, 9, 10, 12, 13, 15, 16, 20, 21, 24, 25, 40, 41, 60, 96].map((n) => E.gridKey(E.bestGrid(n))),
+    ["2x2", "2x2", "2x3", "2x3", "2x4", "2x4", "3x3", "3x4", "3x4", "3x5", "3x5", "4x5", "4x5", "4x6", "4x6", "5x6", "5x8", "6x8", "6x10", "8x12"]);
 });
 
 test("createDash", () => {
@@ -451,5 +451,5 @@ test("custom grids: any size within limits, tiles never deleted", () => {
   const r = E.changeGrid(d, { cols: 5, rows: 2 });
   assert.equal(r.structure.cells.length, 10);
   assert.equal(E.counters(r.structure).length, 7);
-  assert.equal(E.MAX_COUNTERS, 40);
+  assert.equal(E.MAX_COUNTERS, 96);
 });

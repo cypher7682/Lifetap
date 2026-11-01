@@ -6,7 +6,7 @@ export const ICONS = ["droplet", "hexplus", "person", "layers", "heart", "lightn
 export const COLORS = ["teal", "purple", "green", "amber", "red", "blue", "orange", "pink", "grey"];
 const DEFAULT_COLORS = COLORS.slice(0, 5);
 // Grids are any columns × rows within these limits.
-export const GRID_MAX = { cols: 5, rows: 8 };
+export const GRID_MAX = { cols: 8, rows: 12 };
 export const MAX_COUNTERS = GRID_MAX.cols * GRID_MAX.rows;
 export const OPS = ["+", "-", "*", "/", "="];
 export const OP_GLYPH = { "+": "+", "-": "−", "*": "×", "/": "÷", "=": "=" };
@@ -26,7 +26,7 @@ export const sameGrid = (a, b) => a.cols === b.cols && a.rows === b.rows;
 
 /** Best-fit layout for a number of counters: the familiar sizes first, then 4- and 5-wide. */
 export function bestGrid(n) {
-  const fits = [[2, 2], [2, 3], [2, 4], [3, 3], [3, 4], [3, 5], [4, 5], [4, 6], [5, 6], [5, 7], [5, 8]];
+  const fits = [[2, 2], [2, 3], [2, 4], [3, 3], [3, 4], [3, 5], [4, 5], [4, 6], [5, 6], [5, 7], [5, 8], [6, 8], [6, 10], [7, 10], [8, 10], [8, 12]];
   const [cols, rows] = fits.find(([c, r]) => c * r >= n) || [GRID_MAX.cols, GRID_MAX.rows];
   return { cols, rows };
 }
