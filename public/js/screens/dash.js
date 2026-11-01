@@ -42,8 +42,8 @@ function CounterTile({ tile, layout, turn, badge, rec, onStep, onHold }) {
     return html`
       <div class=${"tile counter-tile lay-tiny" + (turn ? " turned" : "")} role="group" aria-label=${`${tile.name}, ${tile.value}`}>
         <div class="tc" style=${turn ? { "--turn": turn + "deg" } : null}>
-          <button class="half half-plus" aria-label=${`${tile.name} plus one. Hold to add more.`} ...${plus}><span class="half-glyph" aria-hidden="true">+</span></button>
-          <button class="half half-minus" aria-label=${`${tile.name} minus one. Hold to take more.`} ...${minus}><span class="half-glyph" aria-hidden="true">−</span></button>
+          <button class="half half-plus" aria-label=${`${tile.name} plus one. Hold to add or take more.`} ...${plus}><span class="half-glyph" aria-hidden="true">+</span></button>
+          <button class="half half-minus" aria-label=${`${tile.name} minus one. Hold to add or take more.`} ...${minus}><span class="half-glyph" aria-hidden="true">−</span></button>
           <div class="tiny-info" aria-hidden="true">
             <span class="tiny-name"><span class=${"c-" + tile.color}><${Icon} name=${tile.icon} size=${12} /></span>${tile.name}${tile.triggers && tile.triggers.length > 0 && html`<${Icon} name="lightning" size=${11} class="tgl-trig" />`}</span>
             <span class="tile-val" style=${{ "--len": len }}>${fmt(tile.value)}</span>
@@ -62,9 +62,9 @@ function CounterTile({ tile, layout, turn, badge, rec, onStep, onHold }) {
           ${tile.triggers && tile.triggers.length > 0 && html`<span class="trig-mark" title="Has triggers"><${Icon} name="lightning" size=${13} /></span>`}
         </div>
         <div class="tile-body">
-          <button class="pm minus" aria-label=${`${tile.name} minus one. Hold to take more.`} ...${minus}><${Icon} name="minus" /></button>
+          <button class="pm minus" aria-label=${`${tile.name} minus one. Hold to add or take more.`} ...${minus}><${Icon} name="minus" /></button>
           <span class="tile-val" style=${{ "--len": len }} aria-hidden="true">${fmt(tile.value)}</span>
-          <button class="pm plus" aria-label=${`${tile.name} plus one. Hold to add more.`} ...${plus}><${Icon} name="plus" /></button>
+          <button class="pm plus" aria-label=${`${tile.name} plus one. Hold to add or take more.`} ...${plus}><${Icon} name="plus" /></button>
         </div>
         ${rec != null && rec !== 0 && html`<span class="badge rec-badge">REC ${signed(rec)}</span>`}
         ${rec == null && badge && html`<span key=${badge.k} class=${"badge delta-badge " + (badge.n < 0 ? "neg" : "pos")}>${signed(badge.n)}</span>`}
@@ -268,19 +268,22 @@ function useSlotDrag({ draggable, canDrop, onDrop }) {
 
 // ---------------------------------------------------------------- how-many sheet
 
-function HowMany({ kind, tile, macro, dir, turn, onDone, onClose }) {
+/**
+ * How-many sheet. For a tile: a signed running total (−10/−1/+1/+10), applied in one go,
+ * whichever button was held to open it. For a repeating macro: how many times to run (≥ 1).
+ */
+function HowMany({ kind, tile, macro, turn, onDone, onClose }) {
   const isMacro = kind === "macro";
-  const floor = isMacro ? 1 : 0;
-  const [n, setN] = useState(floor);
+  const [n, setN] = useState(isMacro ? 1 : 0);
   const [touched, setTouched] = useState(false);
   const bump = (d) => {
     setTouched(true);
-    setN((x) => Math.max(floor, x + d));
+    setN((x) => (isMacro ? Math.max(1, x + d) : x + d));
   };
-  const preview = tile ? tile.value + dir * n : 0;
+  const preview = tile ? tile.value + n : 0;
   const tooFar = !isMacro && preview < 0 && !tile.allowNegative;
-  const title = isMacro ? `Run ${macro.name}` : `${dir > 0 ? "Add to" : "Take from"} ${tile.name}`;
-  const cls = isMacro ? (touched ? "hm-macro on" : "hm-macro") : dir > 0 ? "hm-add" : "hm-take";
+  const title = isMacro ? `Run ${macro.name}` : tile.name;
+  const cls = isMacro ? (touched ? "hm-macro on" : "hm-macro") : n > 0 ? "hm-add" : n < 0 ? "hm-take" : "hm-zero";
   return html`
     <${Sheet} onClose=${onClose} turn=${turn} label=${title} class="howmany">
       <div class="hm-head">
@@ -289,22 +292,22 @@ function HowMany({ kind, tile, macro, dir, turn, onDone, onClose }) {
           <div class="hm-title">${title}</div>
           <div class="hm-sub">${isMacro
             ? `${macro.steps.length} step${macro.steps.length === 1 ? "" : "s"} each run`
-            : html`${fmt(tile.value)} → <b class=${dir > 0 ? "t-teal" : "t-red"}>${fmt(preview)}</b>${tooFar ? " · can't go below 0" : ""}`}</div>
+            : html`${fmt(tile.value)} → <b class=${n > 0 ? "t-teal" : n < 0 ? "t-red" : ""}>${fmt(preview)}</b>${tooFar ? " · can't go below 0" : ""}`}</div>
         </div>
       </div>
-      <div class=${"hm-big " + cls} aria-live="polite">${isMacro ? "×" + n : (dir > 0 ? "+" : "−") + n}</div>
+      <div class=${"hm-big " + cls} aria-live="polite">${isMacro ? "×" + n : signed(n)}</div>
       <div class="hm-cap">${isMacro && !touched ? "use the buttons below to change how many times" : "running total"}</div>
       <div class="hm-btns">
-        <button class="btn btn-num" disabled=${n <= floor} onClick=${() => bump(-10)}>−10</button>
-        <button class="btn btn-num" disabled=${n <= floor} onClick=${() => bump(-1)}>−1</button>
+        <button class="btn btn-num" disabled=${isMacro && n <= 1} onClick=${() => bump(-10)}>−10</button>
+        <button class="btn btn-num" disabled=${isMacro && n <= 1} onClick=${() => bump(-1)}>−1</button>
         <button class="btn btn-num" onClick=${() => bump(1)}>+1</button>
         <button class="btn btn-num" onClick=${() => bump(10)}>+10</button>
       </div>
       <div class="hm-actions">
         <button class="btn btn-cancel" aria-label="Cancel" onClick=${onClose}><${Icon} name="x" /></button>
-        <button class=${"btn btn-block " + (isMacro ? "btn-green" : "btn-primary")} disabled=${n < Math.max(1, floor) || tooFar} onClick=${() => onDone(n)}>
+        <button class=${"btn btn-block " + (isMacro ? "btn-green" : n < 0 ? "btn-take" : "btn-primary")} disabled=${(!isMacro && n === 0) || tooFar} onClick=${() => onDone(n)}>
           <${Icon} name="check" size=${22} />
-          ${isMacro ? (n === 1 ? "Run once" : `Run ×${n}`) : `${dir > 0 ? "Add" : "Take"} ${n}`}
+          ${isMacro ? (n === 1 ? "Run once" : `Run ×${n}`) : `Apply ${signed(n)}`}
         </button>
       </div>
     <//>`;
@@ -877,8 +880,8 @@ export function DashScreen({ id, nav, autoTurn }) {
     if (sheet.type === "howmany") {
       if (sheet.kind === "tile") {
         const tile = E.findTile(v, sheet.tileId);
-        if (tile) sheetEl = html`<${HowMany} kind="tile" tile=${tile} dir=${sheet.dir} turn=${turn} onClose=${close}
-          onDone=${(n) => { close(); step(E.findTile(E.view(store.get(id)), tile.id), sheet.dir * n); }} />`;
+        if (tile) sheetEl = html`<${HowMany} kind="tile" tile=${tile} turn=${turn} onClose=${close}
+          onDone=${(n) => { close(); step(E.findTile(E.view(store.get(id)), tile.id), n); }} />`;
       } else {
         const m = E.findMacro(v, sheet.macroId);
         if (m) sheetEl = html`<${HowMany} kind="macro" macro=${m} turn=${turn} onClose=${close} onDone=${(n) => { close(); runMacro(m.id, n); }} />`;
