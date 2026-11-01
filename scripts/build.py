@@ -10,7 +10,7 @@ if dist.exists():
 shutil.copytree(src, dist)
 
 files = sorted(p for p in dist.rglob("*") if p.is_file() and p.name != "sw.js")
-h = hashlib.sha256()
+h = hashlib.sha256((src / "sw.js").read_bytes())  # a change to the worker itself is a new version too
 for p in files:
     h.update(str(p.relative_to(dist)).encode()); h.update(p.read_bytes())
 version = h.hexdigest()[:12]
