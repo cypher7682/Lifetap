@@ -21,4 +21,7 @@ text = sw.read_text()
 text = re.sub(r'const VERSION = ".*?";', f'const VERSION = "{version}";', text)
 text = re.sub(r'const SHELL = \[.*?\];', "const SHELL = " + json.dumps(shell) + ";", text)
 sw.write_text(text)
+
+vjs = dist / "js" / "version.js"
+vjs.write_text(re.sub(r'APP_VERSION = ".*?"', f'APP_VERSION = "{version}"', vjs.read_text()))
 print(f"built {dist} version {version} ({len(shell)} files precached)")

@@ -1,6 +1,6 @@
 import { html, render, useState, useEffect, useRef } from "../vendor/preact-htm.js";
 import * as store from "./store.js";
-import { Overlays, setRootTurn } from "./ui.js";
+import { Overlays, setRootTurn, snack } from "./ui.js";
 import { DashList } from "./screens/list.js";
 import { NewDash } from "./screens/newdash.js";
 import { DashScreen } from "./screens/dash.js";
@@ -133,5 +133,24 @@ function App() {
 store.load().then(() => render(html`<${App} />`, document.getElementById("app")));
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("SW registration failed", e));
+  // Installed apps on iOS rarely re-check for updates on their own, so check every
+  // time the app comes to the front. A new version installs and takes over straight away
+  // (sw.js skips waiting); then reload, quietly if we're in the background.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloadWhenVisible = false;
+  navigator.serviceWorker
+    .register("./sw.js")
+    .then((reg) => {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "visible") return;
+        if (reloadWhenVisible) return location.reload();
+        reg.update().catch(() => {});
+      });
+    })
+    .catch((e) => console.warn("SW registration failed", e));
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController) return; // first install, nothing to refresh
+    if (document.visibilityState === "hidden") reloadWhenVisible = true;
+    else snack("Lifetap has been updated", "Reload", () => location.reload());
+  });
 }

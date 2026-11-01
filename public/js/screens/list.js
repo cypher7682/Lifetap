@@ -5,6 +5,7 @@ import { Icon } from "../icons.js";
 import { usePress, Sheet, confirm, snack } from "../ui.js";
 import { IconPicker, ColorPicker } from "./pickers.js";
 import { InstallSplash, canOfferInstall, installDismissed } from "../install.js";
+import { APP_VERSION } from "../version.js";
 
 function DashCard({ dash, onOpen, onHold }) {
   const v = E.view(dash);
@@ -75,6 +76,7 @@ export function DashList({ nav }) {
       </div>
       ${offer && !install && html`
         <button class="inst-again" onClick=${() => setInstall(true)}><${Icon} name="download" size=${18} />Install as an app</button>`}
+      <p class="app-version">Lifetap · version ${APP_VERSION}</p>
       ${opts && store.get(opts) && html`<${DashOptions} dash=${store.get(opts)} onClose=${() => setOpts(null)} />`}
       ${install && html`<${InstallSplash} onClose=${() => setInstall(false)} />`}
     </div>`;
