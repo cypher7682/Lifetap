@@ -147,3 +147,20 @@ test("first player: picked at the start, re-picked on reset, undo restores the o
   assert.equal(T.state(t).first, null);
   assert.deepEqual(T.clockwise(5), [1, 3, 4, 2, 0]);
 });
+
+test("swapping seats is an event everyone replays; undo swaps back", () => {
+  let t = mk(["A", "B", "C"]);
+  const [a, b, c] = ids(t);
+  t = T.act(t, T.swapOps(t, 0, 2), "A", 1);
+  assert.deepEqual(ids(t), [c, b, a]);
+  assert.equal(T.describe(t, t.events[1]), "A and C swapped seats");
+  const p = T.newPlayer(t, "D");
+  t = T.act(t, [{ op: "add", p }], "A", 2);
+  assert.deepEqual(ids(t), [c, b, a, p.id], "new players sit at the end");
+  t = T.act(t, [{ op: "remove", p: b }], "A", 3);
+  assert.deepEqual(ids(t), [c, a, p.id]);
+  t = T.undo(t, "A", 4);
+  t = T.undo(t, "A", 5);
+  t = T.undo(t, "A", 6);
+  assert.deepEqual(ids(t), [a, b, c]);
+});

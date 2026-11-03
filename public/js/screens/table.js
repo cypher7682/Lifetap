@@ -6,7 +6,7 @@ import * as E from "../engine.js";
 import { Icon } from "../icons.js";
 import { usePress, Sheet, Popover, MenuItem, IntInput, dialog, confirm, snack, toast, haptic } from "../ui.js";
 import { ViewSwitch } from "../viewswitch.js";
-import { HowMany } from "./dash.js";
+import { HowMany, useSlotDrag } from "./dash.js";
 import * as sync from "../sync.js";
 
 const signed = (n) => (n > 0 ? "+" + n : n < 0 ? "−" + Math.abs(n) : "0");
@@ -252,42 +252,56 @@ function DiceSheet({ onClose }) {
 
 // ---------------------------------------------------------------- sheets
 
-function PlayersSheet({ t, onAct, onClose }) {
+/** Players, laid out like the table: hold and drag to swap seats, tap to rename, × to remove. */
+function PlayersSheet({ t, members = [], onAct, onClose }) {
   const s = T.state(t);
   const [name, setName] = useState("");
+  const [renaming, setRenaming] = useState(null);
+  const grid = T.seatGrid(s.seats.length);
+  const joined = new Set(members.map((m) => m.player));
+  const drag = useSlotDrag({
+    draggable: () => s.seats.length > 1,
+    canDrop: (from, to) => from.index !== to.index,
+    onDrop: (from, to) => onAct(T.swapOps(t, from.index, to.index)),
+  });
   const add = async () => {
     if (s.seats.length >= T.MAX_PLAYERS) return tooManyPlayers();
     const n = name.trim() || `Player ${s.seats.length + 1}`;
     onAct([{ op: "add", p: T.newPlayer(t, n) }]);
     setName("");
   };
+  const rowH = s.seats.length > 8 ? 52 : 64;
   return html`
     <${Sheet} onClose=${onClose} label="Players">
       <h2 class="sheet-title">Players <span class="muted small">${s.seats.length} / ${T.MAX_PLAYERS}</span></h2>
-      <div class="pl-list">
-        ${s.seats.map((p) => html`
-          <div class="pl-row" key=${p.id}>
-            <span class=${"pl-dot bg-" + p.color}></span>
-            <input class="input pl-name" value=${p.name} maxlength="24" aria-label=${`Name of ${p.name}`}
-              onKeyDown=${(e) => e.key === "Enter" && e.currentTarget.blur()}
-              onBlur=${(e) => {
-                const v = e.currentTarget.value.trim();
-                if (v && v !== p.name) onAct([{ op: "rename", p: p.id, name: v, was: p.name }]);
-                else e.currentTarget.value = p.name;
-              }} />
-            ${p.id === t.owner && html`<span class="pl-tag"><${Icon} name="crown" size=${16} /></span>`}
-            ${p.id === t.me && html`<span class="pl-tag">you</span>`}
-            <button class="icon-btn pl-x" aria-label=${`Remove ${p.name}`} onClick=${() => {
-              onAct([{ op: "remove", p: p.id }]);
-              snack(`Removed ${p.name}`);
-            }}><${Icon} name="x" size=${20} /></button>
-          </div>`)}
+      <p class="hint small">${s.seats.length > 1 ? "Hold and drag to swap seats · tap to rename" : "Tap to rename"}</p>
+      <div class="pl-grid" style=${{ gridTemplateRows: `repeat(${grid.rows}, ${rowH}px)` }}>
+        ${s.seats.map((p, i) => {
+          const c = grid.cells[i];
+          const b = drag.bind({ zone: "seat", index: i }, () => setRenaming(p.id));
+          return html`
+            <button key=${p.id} ...${b} class=${"pl-cell c-" + p.color + b.class}
+              style=${{ ...(b.style || {}), gridRow: c.row + 1, gridColumn: c.span === 2 ? "1 / span 2" : c.col + 1 }}
+              aria-label=${`${p.name}. Tap to rename, hold and drag to swap seats.`}>
+              <span class=${"pl-dot bg-" + p.color}></span>
+              <span class="pl-cell-name">${p.name}</span>
+              ${p.id === t.owner && html`<${Icon} name="crown" size=${15} class="pl-tag-ic owner" />`}
+              ${joined.has(p.id) && html`<${Icon} name="phone" size=${15} class="pl-tag-ic" />`}
+              ${p.id === t.me && html`<span class="pl-you">you</span>`}
+              <span class="pl-cell-x" role="button" aria-label=${`Remove ${p.name}`} onPointerDown=${(e) => e.stopPropagation()}
+                onClick=${(e) => { e.stopPropagation(); onAct([{ op: "remove", p: p.id }]); snack(`Removed ${p.name}`); }}>
+                <${Icon} name="x" size=${16} /></span>
+            </button>`;
+        })}
       </div>
       <div class="pl-add">
         <input class="input grow" value=${name} maxlength="24" placeholder=${`Player ${s.seats.length + 1}`} aria-label="New player's name"
           onInput=${(e) => setName(e.currentTarget.value)} onKeyDown=${(e) => e.key === "Enter" && add()} />
         <button class="btn btn-primary" onClick=${add}><${Icon} name="plus" size=${20} />Add</button>
       </div>
+      ${renaming && s.byId[renaming] && html`
+        <${RenameSheet} p=${s.byId[renaming]} turn=${0} onClose=${() => setRenaming(null)}
+          onSave=${(nm) => onAct([{ op: "rename", p: renaming, name: nm, was: s.byId[renaming].name }])} />`}
     <//>`;
 }
 
@@ -523,7 +537,7 @@ export function TableScreen({ id, nav }) {
         <${MenuItem} icon="history" label="View history" onClick=${() => { close(); nav.push({ name: "history", id }); }} />
         ${s.undoable && html`<${MenuItem} icon="undo" label=${`Undo ${T.describe(t, s.undoable)}`} onClick=${() => { close(); doUndo(); }} />`}
       <//>`;
-    else if (sheet.type === "players") sheetEl = html`<${PlayersSheet} t=${t} onAct=${act} onClose=${close} />`;
+    else if (sheet.type === "players") sheetEl = html`<${PlayersSheet} t=${t} members=${conn?.members} onAct=${act} onClose=${close} />`;
     else if (sheet.type === "rename" && s.byId[sheet.p]) {
       const p = s.byId[sheet.p];
       sheetEl = html`<${RenameSheet} p=${p} turn=${angleOf(p.id)} onClose=${close} onSave=${(name) => act([{ op: "rename", p: p.id, name, was: p.name }])} />`;

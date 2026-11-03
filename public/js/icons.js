@@ -38,6 +38,7 @@ const P = {
   dotsv: html`<path d="M12 5.5h.01M12 12h.01M12 18.5h.01" stroke-width="3.2" />`,
   home: html`<path d="M4.5 10.5 12 4l7.5 6.5V19a1 1 0 0 1-1 1h-4v-5.5h-5V20h-4a1 1 0 0 1-1-1z" />`,
   star: html`<path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" />`,
+  phone: html`<rect x="7" y="3" width="10" height="18" rx="2.4" /><path d="M11 17.6h2" />`,
   crown: html`<path d="M4.6 17.5 3 7.8l5.2 4.1L12 5.4l3.8 6.5L21 7.8l-1.6 9.7z" /><path d="M4.6 20.5h14.8" />`,
   dice: html`<rect x="4" y="4" width="16" height="16" rx="3.5" /><path d="M8.6 8.6h.01M15.4 15.4h.01M12 12h.01M15.4 8.6h.01M8.6 15.4h.01" stroke-width="2.8" />`,
   cmdr: html`<rect x="5.5" y="3" width="13" height="18" rx="2.2" /><rect x="8" y="5.8" width="8" height="6.4" rx="1" /><path d="M8 15.2h8M8 18h5" />`,

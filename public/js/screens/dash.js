@@ -184,7 +184,7 @@ const slotKey = (p) => p.zone + ":" + p.index;
  * each slot element; draggable(pos) says whether that slot can be picked up.
  * A quick tap still calls onTap. Scrolling is blocked only while dragging.
  */
-function useSlotDrag({ draggable, canDrop, onDrop }) {
+export function useSlotDrag({ draggable, canDrop, onDrop }) {
   const [drag, setDrag] = useState(null); // { from, over, dx, dy }
   const r = useRef({ timer: 0, start: null, active: null, over: null, suppress: false });
   const cfg = useRef();

@@ -960,3 +960,19 @@ h1, h2, p { margin: 0; }
 .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--line-2); border-top-color: var(--teal); animation: spin .8s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .pick-row:disabled { opacity: .5; }
+
+/* players sheet: the table layout */
+.pl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 14px; }
+.pl-cell {
+  position: relative; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 0 6px 0 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px; text-align: left; touch-action: none;
+  -webkit-touch-callout: none; transition: box-shadow .12s, border-color .12s;
+}
+.pl-cell .pl-dot { margin: 0; width: 12px; height: 12px; }
+.pl-cell-name { flex: 1; min-width: 0; font-size: 16px; font-weight: 560; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-tag-ic { flex: none; color: var(--muted); }
+.pl-tag-ic.owner { color: var(--amber); }
+.pl-you { flex: none; font-size: 11px; font-weight: 650; color: var(--teal); text-transform: uppercase; letter-spacing: .04em; }
+.pl-cell-x { flex: none; width: 36px; height: 36px; display: grid; place-items: center; color: var(--muted); border-radius: 50%; }
+.pl-cell.drop-ok { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); background: rgba(63, 183, 189, .1); }
+.pl-cell.dragging { border-color: var(--teal) !important; }

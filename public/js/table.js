@@ -122,6 +122,14 @@ function applyOp(s, o) {
     case "first":
       if (live(P, o.p)) s.first = o.p;
       return;
+    case "order": {
+      // seat order: the listed players first (as given), then any live seat it missed, then removed players
+      const seats = s.order.filter((id) => live(P, id));
+      const want = o.ids.filter((id) => seats.includes(id));
+      const rest = seats.filter((id) => !want.includes(id));
+      s.order = [...want, ...rest, ...s.order.filter((id) => !live(P, id))];
+      return;
+    }
     case "monarch":
       if (o.p && !live(P, o.p)) return;
       s.monarch = o.p || null;
@@ -201,6 +209,15 @@ export function act(table, ops, by, now = Date.now()) {
   return { ...table, updatedAt: now, events };
 }
 
+/** Swap two seats (by seat index). */
+export function swapOps(table, i, j) {
+  const ids = state(table).seats.map((p) => p.id);
+  if (i === j || !ids[i] || !ids[j]) return [];
+  const swap = [ids[i], ids[j]];
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  return [{ op: "order", ids, swap }];
+}
+
 /** Ops for a reset: everything back to the start, and a new first player. */
 export function resetOps(table, rand = cryptoRandom) {
   const seats = state(table).seats;
@@ -265,6 +282,7 @@ export function describeOp(s, o) {
       return o.p ? `${name(o.p)} is Monarch${o.was ? ` (was ${name(o.was)})` : ""}` : `Nobody is Monarch${o.was ? ` (was ${name(o.was)})` : ""}`;
     case "reset": return "Table reset";
     case "first": return `${name(o.p)} goes first`;
+    case "order": return o.swap ? `${name(o.swap[0])} and ${name(o.swap[1])} swapped seats` : "Seats rearranged";
   }
   return o.op;
 }

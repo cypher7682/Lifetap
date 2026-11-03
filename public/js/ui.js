@@ -173,6 +173,7 @@ function useSwipeDismiss(panelRef, angle, onClose) {
     const start = (e) => {
       if (e.touches.length !== 1) return (g = null);
       const t = e.touches[0];
+      if (e.target.closest("[data-slot]")) return (g = null); // hold-and-drag items inside the sheet
       const onHandle = !!e.target.closest(".sheet-grab, .sheet-title, .hm-head");
       g = { x: t.clientX, y: t.clientY, t0: performance.now(), onHandle, dragging: false, decided: false, d: 0, last: [] };
     };
