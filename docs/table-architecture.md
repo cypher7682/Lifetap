@@ -1,6 +1,6 @@
 # Lifetap tables — architecture
 
-Status: **phase 1 built** (table screen, single device, local storage). Phases 2–4 are design only.
+Status: **phases 1–3 built.** Phase 1 is the table screen on one phone. Phase 3 is the table server, running as a k8s pod on the tailnet only. Phase 4 is design only.
 Anything in the UI that depends on an unbuilt phase is a stub (`void`) that says so.
 
 ## Goals
@@ -84,7 +84,17 @@ If everything nets to zero the event is removed. Phase 3: the client sends
 `amend #seq` instead of a new event; the server accepts it only under the same rule,
 otherwise it treats it as a new event.
 
-## Phase 3 server (design)
+## Phase 3 server (built)
+
+What actually shipped, where it differs from the design below:
+- **Transport:** plain HTTP POST for actions plus **Server-Sent Events** for live updates, instead of a WebSocket. No dependencies (`server/server.mjs` uses node:http and node:sqlite, and imports `public/js/table.js`).
+- **Deploy:** `scripts/deploy-api.sh` applies `deploy/k8s/lifetap-api.yaml` (namespace `lifetap`, 1Gi local-path PVC, node:24-alpine) and ships the code as a ConfigMap. The Tailscale ingress serves it at https://lifetap-api.tail63e765.ts.net. Not managed by Argo CD (yet).
+- **Bundling** happens on the server. Clients send raw ops, and the server merges them using the member's device id.
+- **Clients** apply their own actions straight away and replay any still-unacknowledged actions on top of the server's log (`public/js/sync.js`).
+- **Joining:** the owner seats a joiner as a new player or as an unclaimed seat (renamed to the joiner's name).
+- **Check:** `node server/smoke.mjs <api url>` exercises create / join / approve / act / bundle / undo / owner handoff / rate limit.
+
+## Phase 3 server (original design)
 
 - **Stack:** one small Node process (no framework), `node:sqlite` / better-sqlite3, WebSocket (`ws`).
   Serves only the API; the app stays on GitHub Pages / tailnet.

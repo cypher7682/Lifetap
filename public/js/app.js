@@ -6,7 +6,8 @@ import { DashList } from "./screens/list.js";
 import { NewDash } from "./screens/newdash.js";
 import { DashScreen } from "./screens/dash.js";
 import { MacroEditor } from "./screens/editor.js";
-import { TableScreen, HistoryScreen, NewTable } from "./screens/table.js";
+import { TableScreen, HistoryScreen, NewTable, JoinTable } from "./screens/table.js";
+import * as sync from "./sync.js";
 
 const LAST_KEY = "counter-dash:last";
 
@@ -15,7 +16,8 @@ function useStore() {
   useEffect(() => {
     const a = store.subscribe(() => set((n) => n + 1));
     const b = tables.subscribe(() => set((n) => n + 1));
-    return () => (a(), b());
+    const c = sync.subscribe(() => set((n) => n + 1));
+    return () => (a(), b(), c());
   }, []);
 }
 
@@ -117,6 +119,7 @@ function App() {
   else if (top.name === "dash" && store.get(top.id)) screenEl = html`<${DashScreen} key=${top.id} id=${top.id} nav=${nav} autoTurn=${auto.turn} />`;
   else if (top.name === "macro" && store.get(top.id)) screenEl = html`<${MacroEditor} key=${top.macroId} id=${top.id} macroId=${top.macroId} nav=${nav} />`;
   else if (top.name === "trigger" && store.get(top.id)) screenEl = html`<${MacroEditor} key=${top.triggerId} id=${top.id} tileId=${top.tileId} triggerId=${top.triggerId} nav=${nav} />`;
+  else if (top.name === "join") screenEl = html`<${JoinTable} nav=${nav} />`;
   else if (top.name === "newtable") screenEl = html`<${NewTable} nav=${nav} />`;
   else if (top.name === "table" && tables.get(top.id)) screenEl = html`<${TableScreen} key=${top.id} id=${top.id} nav=${nav} />`;
   else if (top.name === "history" && tables.get(top.id)) screenEl = html`<${HistoryScreen} id=${top.id} nav=${nav} />`;
@@ -142,7 +145,7 @@ function App() {
     </div>`;
 }
 
-Promise.all([store.load(), tables.load()]).then(() => render(html`<${App} />`, document.getElementById("app")));
+Promise.all([store.load(), tables.load()]).then(() => (sync.start(), render(html`<${App} />`, document.getElementById("app"))));
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   // Installed apps on iOS rarely re-check for updates on their own, so check every

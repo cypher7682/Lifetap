@@ -103,11 +103,7 @@ export function DashList({ nav }) {
         ${live
           ? html`<button class="btn btn-primary grow" onClick=${() => nav.push({ name: "table", id: live.id })}><${Icon} name="table" size=${20} />Table <span class="tbl-code-home">#${live.code}</span></button>`
           : html`<button class="btn btn-primary grow" onClick=${() => nav.push({ name: "newtable" })}><${Icon} name="table" size=${20} />Start a table</button>`}
-        <button class="btn btn-plain grow" onClick=${() => dialog({
-          title: "Join a table",
-          body: "Joining another phone's table needs the table server, which is coming next. For now, one phone in the middle of the table runs it.",
-          buttons: [{ label: "OK", value: true, kind: "primary" }],
-        })}><${Icon} name="users" size=${20} />Join table</button>
+        <button class="btn btn-plain grow" onClick=${() => nav.push({ name: "join" })}><${Icon} name="users" size=${20} />Join table</button>
       </div>
       ${offer && !install && html`
         <button class="inst-again" onClick=${() => setInstall(true)}><${Icon} name="download" size=${18} />Install as an app</button>`}

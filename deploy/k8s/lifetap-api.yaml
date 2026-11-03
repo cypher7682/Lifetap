@@ -1,0 +1,112 @@
+# Lifetap table server, tailnet only. Applied by scripts/deploy-api.sh
+# (the server code goes in the lifetap-api-code ConfigMap, built from server/ and public/js/table.js).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: lifetap
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lifetap-data
+  namespace: lifetap
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lifetap-api
+  namespace: lifetap
+spec:
+  replicas: 1 # SQLite: one writer
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: lifetap-api
+  template:
+    metadata:
+      labels:
+        app: lifetap-api
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: node:24-alpine
+          command: ["node", "/app/server.mjs"]
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DB_PATH
+              value: /data/lifetap.db
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: code
+              mountPath: /app
+              readOnly: true
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              memory: 192Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: code
+          configMap:
+            name: lifetap-api-code
+        - name: data
+          persistentVolumeClaim:
+            claimName: lifetap-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lifetap-api
+  namespace: lifetap
+spec:
+  selector:
+    app: lifetap-api
+  ports:
+    - port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lifetap-api
+  namespace: lifetap
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: lifetap-api
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - lifetap-api

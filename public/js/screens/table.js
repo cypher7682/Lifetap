@@ -7,11 +7,13 @@ import { Icon } from "../icons.js";
 import { usePress, Sheet, Popover, MenuItem, IntInput, dialog, confirm, snack, toast, haptic } from "../ui.js";
 import { ViewSwitch } from "../viewswitch.js";
 import { HowMany } from "./dash.js";
+import * as sync from "../sync.js";
 
 const signed = (n) => (n > 0 ? "+" + n : n < 0 ? "−" + Math.abs(n) : "0");
 const fmt = (n) => (n < 0 ? "−" + Math.abs(n) : String(n));
 const ANIM_KEY = "lifetap:dice-anim";
 const NAME_KEY = "lifetap:name";
+const SHARED_KEY = "lifetap:shared";
 
 /** Splash for a 17th player. The only answer is "Yes". */
 export const tooManyPlayers = () =>
@@ -338,10 +340,40 @@ function ShareSheet({ t, onClose }) {
   return html`
     <${Sheet} onClose=${onClose} label="Share table">
       <h2 class="sheet-title">Table code</h2>
-      <div class="share-code">${t.code}</div>
-      <div class="share-qr" aria-hidden="true"><${Icon} name="grid" size=${40} /><span>QR code</span></div>
-      <p class="hint small center">Joining from other phones arrives with the table server. For now this table lives on this phone only.</p>
+      <div class="share-code">#${t.code}</div>
+      ${t.online
+        ? html`<p class="hint center">On another phone: <b>Join table</b> on the home screen, then type this code. ${t.owner === t.me ? "You'll be asked to let them in." : "The table owner lets them in."}</p>`
+        : html`<p class="hint small center">This table lives on this phone only, so nobody can join it. Start a new table with “Others can join” on to share one.</p>`}
       <button class="btn btn-primary btn-block" onClick=${onClose}>OK</button>
+    <//>`;
+}
+
+/** Someone wants in: seat them as a new player, as one of the unclaimed seats, or say no. */
+function JoinRequestSheet({ t, req, members, onClose }) {
+  const s = T.state(t);
+  const claimed = new Set(members.map((m) => m.player));
+  const free = s.seats.filter((p) => !claimed.has(p.id));
+  const [busy, setBusy] = useState(false);
+  const go = async (approve, seat) => {
+    setBusy(true);
+    try { await sync.answer(t.id, req.reqId, approve, seat); } catch (e) { toast(e.message); }
+    onClose();
+  };
+  const who = req.name || "Someone";
+  return html`
+    <${Sheet} onClose=${onClose} label="Join request">
+      <h2 class="sheet-title">${who} wants to join</h2>
+      <p class="hint small">Seat them as:</p>
+      <div class="pick-list">
+        ${free.map((p) => html`
+          <button class="pick-row" disabled=${busy} onClick=${() => go(true, p.id)}>
+            <span class=${"pl-dot bg-" + p.color}></span><span class="grow">${p.name}${req.name && req.name !== p.name ? html` <span class="muted small">→ ${req.name}</span>` : ""}</span>
+          </button>`)}
+        <button class="pick-row pick-new" disabled=${busy || s.seats.length >= T.MAX_PLAYERS} onClick=${() => go(true, null)}>
+          <span class="pick-icon"><${Icon} name="plus" size=${22} /></span><span class="grow">New player</span>
+        </button>
+      </div>
+      <button class="btn btn-danger-soft btn-block" disabled=${busy} onClick=${() => go(false)}>Don't let them in</button>
     <//>`;
 }
 
@@ -383,7 +415,9 @@ export function TableScreen({ id, nav }) {
   const [, tick] = useState(0);
   const by = tables.deviceId;
 
-  const act = (ops) => tables.update(id, (x) => T.act(x, ops, by));
+  const online = !!t.online;
+  const conn = online ? sync.info(id) : null;
+  const act = (ops) => (online ? sync.act(id, { ops }) : tables.update(id, (x) => T.act(x, ops, by)));
 
   // delta badges show this phone's open bundle; re-render when it closes
   const deltas = T.bundleDeltas(t, by);
@@ -428,21 +462,30 @@ export function TableScreen({ id, nav }) {
   const doUndo = () => {
     const e = s.undoable;
     if (!e) return;
-    tables.update(id, (x) => T.undo(x, by));
+    online ? sync.act(id, { kind: "undo" }) : tables.update(id, (x) => T.undo(x, by));
     toast(`Undid ${T.describe(t, e)}`);
   };
   const doRedo = () => {
     const e = s.redoable;
     if (!e) return;
-    tables.update(id, (x) => T.redo(x, by));
+    online ? sync.act(id, { kind: "redo" }) : tables.update(id, (x) => T.redo(x, by));
     toast(`Redid ${T.describe(t, e)}`);
   };
   const undoPress = usePress({ onTap: doUndo, onLong: (el) => setSheet({ type: "undohold", anchor: el }) });
 
   const leave = async () => {
     setSheet(null);
-    if (!(await confirm("Leave table?", "This table only lives on this phone for now, so leaving closes it for good.", "Leave", true))) return;
-    tables.remove(id);
+    if (online) {
+      const next = (conn?.members || []).find((m) => m.player !== t.me);
+      const body = t.owner === t.me
+        ? next ? `Everyone else carries on, and ${next.name || "the next player"} becomes the table owner.` : "Nobody else has joined, so the table closes when it's been idle for an hour."
+        : "Everyone else carries on without you.";
+      if (!(await confirm("Leave table?", body, "Leave", true))) return;
+      await sync.leave(id);
+    } else {
+      if (!(await confirm("Leave table?", "This table only lives on this phone, so leaving closes it for good.", "Leave", true))) return;
+      tables.remove(id);
+    }
     nav.back();
   };
 
@@ -513,7 +556,8 @@ export function TableScreen({ id, nav }) {
       <header class="dash-head table-head">
         <button class="icon-btn" aria-label="Back to home" onClick=${() => nav.back()}><${Icon} name="back" /></button>
         <button class="head-title title-btn" aria-label=${`Table ${t.code}. Menu`} onClick=${(e) => setSheet({ type: "menu", anchor: e.currentTarget })}>
-          <span class="title-text">Table: <span class="tbl-code">#${t.code}</span></span><${Icon} name="chevdown" size=${18} class="title-chev" /></button>
+          <span class="title-text">Table: <span class="tbl-code">#${t.code}</span></span>
+          ${online && html`<span class=${"net-dot " + (conn?.status || "connecting")} title=${conn?.status || "connecting"}></span>`}<${Icon} name="chevdown" size=${18} class="title-chev" /></button>
         ${owner && html`<span class="owner-chip" title="Table owner"><${Icon} name="crown" size=${16} /><span>${owner.name}</span></span>`}
         <${ViewSwitch} view="life" onSwitch=${() => goCounters(t, nav, () => setSheet({ type: "pick" }))} />
       </header>
@@ -561,6 +605,9 @@ export function TableScreen({ id, nav }) {
         </div>
       </nav>
       ${sheetEl}
+      ${!sheetEl && online && t.owner === t.me && conn?.requests?.length > 0 && html`
+        <${JoinRequestSheet} key=${conn.requests[0].reqId} t=${t} req=${conn.requests[0]} members=${conn.members}
+          onClose=${() => { conn.requests = conn.requests.slice(1); tick((n) => n + 1); }} />`}
     </div>`;
 }
 
@@ -618,11 +665,25 @@ export function NewTable({ nav }) {
   const [me, setMe] = useState(() => localStorage.getItem(NAME_KEY) || "");
   const [others, setOthers] = useState(["", "", ""]);
   const [life, setLife] = useState(T.DEFAULT_LIFE);
+  const [shared, setShared] = useState(() => localStorage.getItem(SHARED_KEY) !== "off");
+  const [busy, setBusy] = useState(false);
   const setOther = (i, v) => setOthers((o) => o.map((x, j) => (j === i ? v : x)));
   const addRow = () => (others.length + 1 >= T.MAX_PLAYERS ? tooManyPlayers() : setOthers([...others, ""]));
-  const start = () => {
+  const start = async () => {
     if (me.trim()) localStorage.setItem(NAME_KEY, me.trim());
+    localStorage.setItem(SHARED_KEY, shared ? "on" : "off");
     const names = [me.trim() || "Player 1", ...others.map((n, i) => n.trim() || `Player ${i + 2}`)];
+    if (shared) {
+      setBusy(true);
+      try {
+        const id = await sync.create({ names, startLife: life });
+        return nav.replace({ name: "table", id });
+      } catch (e) {
+        setBusy(false);
+        const local = await confirm("Couldn't reach the table server", `${e.message} You can still run the table on this phone, but nobody else can join it.`, "Start on this phone");
+        if (!local) return;
+      }
+    }
     const t = T.createTable({ names, startLife: life, by: tables.deviceId });
     tables.put(t);
     nav.replace({ name: "table", id: t.id });
@@ -651,9 +712,87 @@ export function NewTable({ nav }) {
         <button class="btn btn-dashed btn-block" onClick=${addRow}><${Icon} name="plus" size=${20} />Add player</button>
 
         <${LifeField} value=${life} onChange=${setLife} />
+
+        <label class="switch-row">
+          <span>Others can join from their phones</span>
+          <input type="checkbox" class="switch" checked=${shared} onChange=${() => setShared(!shared)} />
+        </label>
       </div>
       <div class="foot">
-        <button class="btn btn-primary btn-block btn-xl" onClick=${start}>Start table · ${others.length + 1} players</button>
+        <button class="btn btn-primary btn-block btn-xl" disabled=${busy} onClick=${start}>${busy ? "Starting…" : `Start table · ${others.length + 1} players`}</button>
+      </div>
+    </div>`;
+}
+
+// ---------------------------------------------------------------- join
+
+export function JoinTable({ nav }) {
+  const [code, setCode] = useState("");
+  const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) || "");
+  const [st, setSt] = useState({ phase: "idle" }); // idle | asking | waiting | error
+  const alive = useRef(true);
+  useEffect(() => () => (alive.current = false), []);
+  const ok = /^[a-z0-9]{4}$/.test(code);
+
+  const join = async () => {
+    if (!ok) return;
+    if (name.trim()) localStorage.setItem(NAME_KEY, name.trim());
+    setSt({ phase: "asking" });
+    let req;
+    try {
+      req = await sync.askToJoin(code, name.trim());
+    } catch (e) {
+      return setSt({ phase: "error", msg: e.message });
+    }
+    setSt({ phase: "waiting" });
+    const started = Date.now();
+    while (alive.current && Date.now() - started < 130000) {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (!alive.current) return;
+      let a;
+      try { a = await sync.joinStatus(req.reqId); } catch { continue; }
+      if (a.status === "approved") {
+        try {
+          await sync.enter(a.tableId, a.token);
+        } catch (e) {
+          return setSt({ phase: "error", msg: e.message });
+        }
+        if (alive.current) nav.replace({ name: "table", id: a.tableId });
+        return;
+      }
+      if (a.status === "denied") return setSt({ phase: "error", msg: "The table owner didn't let you in." });
+      if (a.status !== "pending") break;
+    }
+    if (alive.current) setSt({ phase: "error", msg: "Nobody answered. Check the code and try again." });
+  };
+
+  const waiting = st.phase === "asking" || st.phase === "waiting";
+  return html`
+    <div class="page new-page">
+      <header class="bar-head">
+        <button class="icon-btn round" aria-label="Back" onClick=${() => nav.back()}><${Icon} name="back" /></button>
+        <h1 class="head-title center">Join a table</h1>
+        <span class="icon-btn-spacer"></span>
+      </header>
+      <div class="scroll">
+        <label class="field-label" for="jt-code">Table code</label>
+        <div class="code-wrap">
+          <span class="code-hash" aria-hidden="true">#</span>
+          <input id="jt-code" class="input input-lg code-input" value=${code} maxlength="4" placeholder="ab12" disabled=${waiting}
+            autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text"
+            onInput=${(e) => { const v = e.currentTarget.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 4); e.currentTarget.value = v; setCode(v); }}
+            onKeyDown=${(e) => e.key === "Enter" && join()} />
+        </div>
+        <label class="field-label" for="jt-name">Your name <span class="muted small">(optional)</span></label>
+        <input id="jt-name" class="input input-lg" value=${name} maxlength="24" placeholder="Your name" disabled=${waiting}
+          onInput=${(e) => setName(e.currentTarget.value)} onKeyDown=${(e) => e.key === "Enter" && join()} />
+        ${waiting && html`<div class="join-wait"><span class="spinner" aria-hidden="true"></span>${st.phase === "asking" ? "Finding the table…" : "Waiting for the table owner to let you in…"}</div>`}
+        ${st.phase === "error" && html`<div class="field-err join-err">${st.msg}</div>`}
+      </div>
+      <div class="foot">
+        ${waiting
+          ? html`<button class="btn btn-plain btn-block btn-xl" onClick=${() => { alive.current = false; nav.back(); }}>Cancel</button>`
+          : html`<button class="btn btn-primary btn-block btn-xl" disabled=${!ok} onClick=${join}>Join table</button>`}
       </div>
     </div>`;
 }

@@ -57,6 +57,7 @@ export function subscribe(fn) {
 }
 
 export const get = (id) => tables.get(id) || null;
+export const all = () => [...tables.values()];
 
 /** The live table on this device (one at a time), if any. */
 export function current() {
