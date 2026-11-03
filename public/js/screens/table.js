@@ -41,7 +41,7 @@ const turnClass = (a) => (a === 90 || a === -90 ? " side" : a === 180 ? " flip" 
 
 // ---------------------------------------------------------------- player card
 
-function PlayerCard({ p, angle, isMonarch, badge, killing, onLife, onHoldLife, onCmdr, onMonarch, onKill, cmdrMax }) {
+function PlayerCard({ p, angle, isMonarch, badge, killing, onLife, onHoldLife, onCmdr, onRename, onMonarch, onKill, map }) {
   const minus = usePress({ onTap: () => onLife(-1), onLong: () => onHoldLife(-1), disabled: killing });
   const plus = usePress({ onTap: () => onLife(1), onLong: () => onHoldLife(1), disabled: killing });
   const len = Math.max(1, fmt(p.life).length);
@@ -51,12 +51,10 @@ function PlayerCard({ p, angle, isMonarch, badge, killing, onLife, onHoldLife, o
       <div class="pc">
         <button class="pc-half pc-minus" aria-label=${`${p.name} minus one life. Hold for more.`} ...${minus}><span class="pc-glyph">−</span></button>
         <button class="pc-half pc-plus" aria-label=${`${p.name} plus one life. Hold for more.`} ...${plus}><span class="pc-glyph">+</span></button>
-        <div class="pc-name">${p.name}</div>
+        <button class="pc-name" aria-label=${`Rename ${p.name}`} onClick=${onRename}><span>${p.name}</span><${Icon} name="pencil" size=${13} /></button>
         <div class="pc-life" style=${{ "--len": len }} aria-hidden="true">${fmt(p.life)}</div>
         <button class=${"pc-crown" + (isMonarch ? " on" : "")} aria-label=${isMonarch ? `${p.name} is the Monarch` : `Make ${p.name} the Monarch`} onClick=${onMonarch}>
           <${Icon} name="crown" size=${20} /></button>
-        <button class=${"pc-cmdr" + (cmdrMax >= T.CMDR_LETHAL ? " lethal" : cmdrMax ? " some" : "")} aria-label=${`Commander damage to ${p.name}`} onClick=${onCmdr}>
-          <${Icon} name="cmdr" size=${18} />${cmdrMax > 0 && html`<span>${cmdrMax}</span>`}</button>
         ${badge ? html`<span key=${badge.k} class=${"badge delta-badge pc-badge " + (badge.n < 0 ? "neg" : "pos")}>${signed(badge.n)}</span>` : null}
         ${p.dead && html`<div class="pc-dead" aria-hidden="true"><${Icon} name="skull" size=${64} /></div>`}
         ${killing && html`
@@ -65,7 +63,43 @@ function PlayerCard({ p, angle, isMonarch, badge, killing, onLife, onHoldLife, o
             <span class="pc-kill-name">${p.dead ? `Revive ${p.name}` : p.name}</span>
           </button>`}
       </div>
+      ${!killing && html`<${CmdrMap} ...${map} victim=${p} angle=${angle} onClick=${onCmdr} />`}
     </div>`;
+}
+
+/**
+ * Commander damage at a glance: a little copy of the table, laid out like the real one,
+ * with the damage each seat's commander has done to this player. Numbers face the card's player.
+ */
+function CmdrMap({ s, grid, w, h, victim, angle, onClick }) {
+  const side = angle === 90 || angle === -90;
+  return html`
+    <button class=${"cm-map at" + angle} style=${{ width: w + "px", height: h + "px", gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}
+      aria-label=${`Commander damage to ${victim.name}`} onClick=${onClick}>
+      ${s.seats.map((src, i) => {
+        const c = grid.cells[i];
+        const pair = T.cmdrOf(s, victim.id, src.id);
+        const total = pair[0] + pair[1];
+        const cw = (w / 2) * c.span, ch = h / grid.rows;
+        const wide = side ? ch > cw : cw > ch; // as the reader sees it
+        const lethal = src.partners ? Math.max(pair[0], pair[1]) >= T.CMDR_LETHAL : total >= T.CMDR_LETHAL;
+        const txt = !total ? "" : src.partners
+          ? (wide ? `${pair[0]}/${pair[1]}` : html`${pair[0]}<br />${pair[1]}`)
+          : total;
+        return html`
+          <span key=${src.id} class=${"cmm-cell" + (src.id === victim.id ? " self" : "") + (lethal ? " lethal" : "")}
+            style=${{ gridRow: c.row + 1, gridColumn: c.span === 2 ? "1 / span 2" : c.col + 1 }}>
+            <span class="cmm-val" style=${{ transform: `rotate(${angle}deg)` }}>${txt}</span>
+          </span>`;
+      })}
+    </button>`;
+}
+
+/** Map size for a card: same shape as the table area, tucked against the player's edge. */
+function mapSize(area, cardW, cardH, side) {
+  const along = side ? Math.min(cardH * 0.8 / area.h, cardW * 0.26 / area.w) : Math.min(cardH * 0.3 / area.h, cardW * 0.5 / area.w);
+  const k = Math.max(0.07, Math.min(along, 110 / Math.max(area.w, area.h)));
+  return { w: Math.round(area.w * k), h: Math.round(area.h * k) };
 }
 
 // ---------------------------------------------------------------- commander damage
@@ -241,6 +275,22 @@ function PlayersSheet({ t, onAct, onClose }) {
     <//>`;
 }
 
+function RenameSheet({ p, turn, onSave, onClose }) {
+  const [name, setName] = useState(p.name);
+  const save = () => {
+    const v = name.trim();
+    if (v && v !== p.name) onSave(v);
+    onClose();
+  };
+  return html`
+    <${Sheet} onClose=${onClose} turn=${turn} label="Rename player">
+      <h2 class="sheet-title">Name</h2>
+      <input class="input input-lg" value=${name} maxlength="24" autofocus aria-label="Name"
+        onInput=${(e) => setName(e.currentTarget.value)} onKeyDown=${(e) => e.key === "Enter" && save()} />
+      <button class="btn btn-primary btn-block" disabled=${!name.trim()} onClick=${save}>Save</button>
+    <//>`;
+}
+
 function SettingsSheet({ t, onAct, onClose }) {
   const s = T.state(t);
   const [life, setLife] = useState(s.startLife);
@@ -381,7 +431,10 @@ export function TableScreen({ id, nav }) {
         ${s.undoable && html`<${MenuItem} icon="undo" label=${`Undo ${T.describe(t, s.undoable)}`} onClick=${() => { close(); doUndo(); }} />`}
       <//>`;
     else if (sheet.type === "players") sheetEl = html`<${PlayersSheet} t=${t} onAct=${act} onClose=${close} />`;
-    else if (sheet.type === "settings") sheetEl = html`<${SettingsSheet} t=${t} onAct=${act} onClose=${close} />`;
+    else if (sheet.type === "rename" && s.byId[sheet.p]) {
+      const p = s.byId[sheet.p];
+      sheetEl = html`<${RenameSheet} p=${p} turn=${angleOf(p.id)} onClose=${close} onSave=${(name) => act([{ op: "rename", p: p.id, name, was: p.name }])} />`;
+    } else if (sheet.type === "settings") sheetEl = html`<${SettingsSheet} t=${t} onAct=${act} onClose=${close} />`;
     else if (sheet.type === "share") sheetEl = html`<${ShareSheet} t=${t} onClose=${close} />`;
     else if (sheet.type === "dice") sheetEl = html`<${DiceSheet} onClose=${close} />`;
     else if (sheet.type === "pick") sheetEl = html`<${PickDashSheet} t=${t} onClose=${close} onPick=${(dashId) => {
@@ -419,8 +472,9 @@ export function TableScreen({ id, nav }) {
       <header class="table-head">
         <button class="icon-btn" aria-label="Back to home" onClick=${() => nav.back()}><${Icon} name="back" /></button>
         <button class="head-title title-btn" aria-label=${`Table ${t.code}. Menu`} onClick=${(e) => setSheet({ type: "menu", anchor: e.currentTarget })}>
-          <span class="title-text">Table <span class="mono tbl-code">${t.code}</span></span><${Icon} name="chevdown" size=${18} class="title-chev" /></button>
+          <span class="title-text">Table: <span class="tbl-code">#${t.code}</span></span><${Icon} name="chevdown" size=${18} class="title-chev" /></button>
         ${owner && html`<span class="owner-chip" title="Table owner"><${Icon} name="crown" size=${16} /><span>${owner.name}</span></span>`}
+        <${ViewSwitch} view="life" onSwitch=${() => goCounters(t, nav, () => setSheet({ type: "pick" }))} />
       </header>
       <div class=${"table-area" + (killing ? " kill-mode" : "")} ref=${area} style=${{ gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}>
         ${size.w > 0 && s.seats.map((p, i) => {
@@ -428,7 +482,9 @@ export function TableScreen({ id, nav }) {
           const badge = deltas[p.id] ? { n: deltas[p.id], k: last.seq } : null;
           return html`
             <div key=${p.id} class="seat" style=${{ gridRow: c.row + 1, gridColumn: c.span === 2 ? "1 / span 2" : c.col + 1 }}>
-              <${PlayerCard} p=${p} angle=${angles[i]} isMonarch=${s.monarch === p.id} badge=${badge} killing=${killing} cmdrMax=${maxCmdr(p, s)}
+              <${PlayerCard} p=${p} angle=${angles[i]} isMonarch=${s.monarch === p.id} badge=${badge} killing=${killing}
+                map=${{ s, grid, ...mapSize(size, (size.w / 2) * c.span, size.h / grid.rows, angles[i] === 90 || angles[i] === -90) }}
+                onRename=${() => setSheet({ type: "rename", p: p.id })}
                 onLife=${(d) => act([{ op: "life", p: p.id, d }])}
                 onHoldLife=${() => setSheet({ type: "life", p: p.id })}
                 onCmdr=${() => setSheet({ type: "cmdr", p: p.id })}
@@ -449,20 +505,9 @@ export function TableScreen({ id, nav }) {
         <button class="icon-btn round" aria-label=${s.redoable ? `Redo ${T.describe(t, s.redoable)}` : "Nothing to redo"} disabled=${!s.redoable} onClick=${doRedo}><${Icon} name="redo" size=${22} /></button>
         <button class=${"icon-btn round kill-btn" + (killing ? " on" : "")} aria-pressed=${killing} aria-label=${killing ? "Cancel kill mode" : "Kill a player"}
           disabled=${!s.seats.length} onClick=${() => setKilling(!killing)}><${Icon} name="skull" size=${22} /></button>
-        <${ViewSwitch} view="life" onSwitch=${() => goCounters(t, nav, () => setSheet({ type: "pick" }))} />
       </nav>
       ${sheetEl}
     </div>`;
-}
-
-/** Most commander damage a player has taken from any one commander (or partner half). */
-function maxCmdr(p, s) {
-  let m = 0;
-  for (const [from, pair] of Object.entries(p.cmdr)) {
-    const split = s.byId[from]?.partners;
-    m = Math.max(m, split ? Math.max(pair[0], pair[1]) : pair[0] + pair[1]);
-  }
-  return m;
 }
 
 // ---------------------------------------------------------------- history

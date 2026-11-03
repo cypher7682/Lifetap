@@ -741,8 +741,9 @@ h1, h2, p { margin: 0; }
 .table-page { padding-bottom: var(--safe-bottom); }
 .table-head { display: flex; align-items: center; gap: 4px; padding: 8px 12px 8px 2px; min-height: 58px; flex: none; }
 .table-head .icon-btn:first-child { width: 38px; }
-.tbl-code { letter-spacing: .06em; font-weight: 700; }
-.owner-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 40%; padding: 6px 10px; border-radius: 16px; background: rgba(226, 179, 65, .12); color: var(--amber); font-size: 14px; font-weight: 600; }
+.table-head .head-title { font-weight: 520; font-size: 20px; }
+.tbl-code { color: var(--teal); font-weight: 560; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
+.owner-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 30%; flex: none; padding: 6px 10px; border-radius: 16px; background: rgba(226, 179, 65, .12); color: var(--amber); font-size: 14px; font-weight: 600; }
 .owner-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table-area { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 10px; }
 .seat { min-width: 0; min-height: 0; }
@@ -771,12 +772,15 @@ h1, h2, p { margin: 0; }
 .pc-plus { right: 0; justify-content: flex-end; padding-right: min(18px, 5cqw); }
 .pc-glyph { font-size: min(40px, 18cqh, 12cqw); font-weight: 300; line-height: 1; }
 .pc-name {
-  position: absolute; top: min(10px, 4cqh); left: 50px; right: 50px; text-align: center; pointer-events: none;
-  font-size: min(17px, 13cqh); font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: currentColor;
+  position: absolute; top: min(6px, 2cqh); left: 50%; transform: translateX(-50%); max-width: calc(100% - 100px); z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 36px; padding: 0 8px;
+  font-size: min(17px, 13cqh); font-weight: 560; color: currentColor;
 }
+.pc-name span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-name .ic { opacity: .55; }
 .pc-life {
   position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
-  font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.04em; line-height: 1; color: var(--text);
+  font-weight: 560; font-variant-numeric: tabular-nums; letter-spacing: -.035em; line-height: 1; color: var(--text);
   font-size: min(46cqh, calc(62cqw / (var(--len) * .62)), 128px);
 }
 .pc-crown {
@@ -785,37 +789,25 @@ h1, h2, p { margin: 0; }
 }
 .pc-crown.on { color: var(--amber); filter: drop-shadow(0 0 6px rgba(226, 179, 65, .5)); }
 .pc-crown.on .ic { fill: rgba(226, 179, 65, .35); }
-.pc-cmdr {
-  position: absolute; bottom: min(8px, 3cqh); left: 50%; transform: translateX(-50%); z-index: 2;
-  height: min(36px, 22cqh); min-width: 52px; padding: 0 10px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  background: var(--surface-2); border: 1px solid var(--line-2); color: var(--muted); font-weight: 650; font-size: 15px; font-variant-numeric: tabular-nums;
-}
-.pc-cmdr.some { color: var(--text); }
-.pc-cmdr.lethal { background: rgba(229, 72, 77, .2); border-color: var(--red); color: var(--red-text); }
 .pc-badge { top: min(8px, 3cqh); left: 8px; right: auto; z-index: 2; }
 .pcard.dead .pc > :not(.pc-dead):not(.pc-kill) { opacity: .25; filter: grayscale(1); }
 .pcard.dead { color: #555; }
 .pc-dead { position: absolute; inset: 0; display: grid; place-items: center; color: #e8e8ec; pointer-events: none; z-index: 3; }
 .pc-dead .ic { width: min(64px, 40cqh); height: min(64px, 40cqh); opacity: .85; }
-.pcard.dead .pc-crown, .pcard.dead .pc-cmdr { pointer-events: auto; }
 
 /* tall, narrow cards (lots of players, sideways): + on top, − at the bottom */
 @container (max-aspect-ratio: 4/5) {
   .pc-half { width: 100%; height: 50%; left: 0; right: 0; justify-content: center; padding: 0; align-items: flex-start; }
   .pc-minus { top: auto; bottom: 0; align-items: flex-end; padding-bottom: 6px; }
   .pc-plus { top: 0; padding-top: 6px; }
-  .pc-name { top: auto; bottom: 34%; left: 6px; right: 6px; font-size: min(14px, 9cqw); }
+  .pc-name { top: auto; bottom: 30%; max-width: calc(100% - 8px); font-size: min(14px, 9cqw); min-height: 28px; }
   .pc-life { font-size: min(30cqh, calc(80cqw / (var(--len) * .62)), 96px); }
-  .pc-cmdr { bottom: auto; top: 27%; height: 26px; min-width: 40px; padding: 0 6px; font-size: 13px; }
-  .pc-cmdr .ic { width: 15px; height: 15px; }
   .pc-crown { width: 34px; height: 34px; }
   .pc-glyph { font-size: min(34px, 22cqw); }
 }
 /* very short cards */
 @container (max-height: 110px) {
-  .pc-name { top: 3px; font-size: 13px; }
-  .pc-cmdr { height: 24px; bottom: 3px; font-size: 12px; min-width: 40px; }
-  .pc-cmdr .ic { width: 14px; height: 14px; }
+  .pc-name { top: 0; font-size: 13px; min-height: 26px; }
   .pc-crown { width: 32px; height: 32px; }
   .pc-crown .ic { width: 16px; height: 16px; }
 }
@@ -933,3 +925,19 @@ h1, h2, p { margin: 0; }
 /* the rotated "flip" sheet view keeps portrait proportions */
 .rotview.flip { width: 100cqw; height: 100cqh; }
 .dash-head .view-switch { padding: 0 8px; }
+
+/* commander damage mini map: lives outside the rotated content, so it mirrors the real table */
+.cm-map {
+  position: absolute; z-index: 3; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px;
+  background: rgba(13, 14, 17, .55); border: 1px solid var(--line-2); border-radius: 7px;
+}
+.cm-map.at0 { bottom: 7px; left: 50%; transform: translateX(-50%); }
+.cm-map.at180 { top: 7px; left: 50%; transform: translateX(-50%); }
+.cm-map.at90 { left: 7px; top: 50%; transform: translateY(-50%); }
+.cm-map.at-90 { right: 7px; top: 50%; transform: translateY(-50%); }
+.cmm-cell { min-width: 0; min-height: 0; border-radius: 3px; background: #2a2e37; display: grid; place-items: center; overflow: hidden; container-type: size; }
+.cmm-cell.self { background: transparent; box-shadow: inset 0 0 0 1px #3a3e48; }
+.cmm-val { font-size: clamp(7px, 46cqmin, 15px); font-weight: 600; line-height: 1.05; text-align: center; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cmm-cell.lethal { background: rgba(229, 72, 77, .35); }
+.cmm-cell.lethal .cmm-val { color: #fff; }
+.pcard.dead .cm-map { opacity: .3; }
