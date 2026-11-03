@@ -101,7 +101,7 @@ export function DashList({ nav }) {
       </div>
       <div class="table-entry">
         ${live
-          ? html`<button class="btn btn-primary grow" onClick=${() => nav.push({ name: "table", id: live.id })}><${Icon} name="table" size=${20} />Back to table <span class="mono">${live.code}</span></button>`
+          ? html`<button class="btn btn-primary grow" onClick=${() => nav.push({ name: "table", id: live.id })}><${Icon} name="table" size=${20} />Table <span class="tbl-code-home">#${live.code}</span></button>`
           : html`<button class="btn btn-primary grow" onClick=${() => nav.push({ name: "newtable" })}><${Icon} name="table" size=${20} />Start a table</button>`}
         <button class="btn btn-plain grow" onClick=${() => dialog({
           title: "Join a table",
