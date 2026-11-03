@@ -2,10 +2,11 @@ import { html, useState } from "../../vendor/preact-htm.js";
 import * as store from "../store.js";
 import * as E from "../engine.js";
 import { Icon } from "../icons.js";
-import { usePress, Sheet, confirm, snack } from "../ui.js";
+import { usePress, Sheet, confirm, snack, dialog } from "../ui.js";
 import { IconPicker, ColorPicker } from "./pickers.js";
 import { InstallSplash, canOfferInstall, installDismissed } from "../install.js";
 import { APP_VERSION } from "../version.js";
+import * as tables from "../tablestore.js";
 
 function DashCard({ dash, onOpen, onHold }) {
   const v = E.view(dash);
@@ -85,6 +86,7 @@ export function DashList({ nav }) {
   const [opts, setOpts] = useState(null);
   const [diag, setDiag] = useState(false);
   const offer = canOfferInstall();
+  const live = tables.current();
   const [install, setInstall] = useState(() => offer && !installDismissed());
   return html`
     <div class="page list-page">
@@ -96,6 +98,16 @@ export function DashList({ nav }) {
           <${Icon} name="plus" size=${44} />
           <span class="card-name">Add new</span>
         </button>
+      </div>
+      <div class="table-entry">
+        ${live
+          ? html`<button class="btn btn-primary grow" onClick=${() => nav.push({ name: "table", id: live.id })}><${Icon} name="table" size=${20} />Back to table <span class="mono">${live.code}</span></button>`
+          : html`<button class="btn btn-primary grow" onClick=${() => nav.push({ name: "newtable" })}><${Icon} name="table" size=${20} />Start a table</button>`}
+        <button class="btn btn-plain grow" onClick=${() => dialog({
+          title: "Join a table",
+          body: "Joining another phone's table needs the table server, which is coming next. For now, one phone in the middle of the table runs it.",
+          buttons: [{ label: "OK", value: true, kind: "primary" }],
+        })}><${Icon} name="users" size=${20} />Join table</button>
       </div>
       ${offer && !install && html`
         <button class="inst-again" onClick=${() => setInstall(true)}><${Icon} name="download" size=${18} />Install as an app</button>`}

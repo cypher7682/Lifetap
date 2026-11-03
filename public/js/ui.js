@@ -234,7 +234,7 @@ export function Sheet({ onClose, children, turn = 0, label, class: cls = "" }) {
     </div>`;
   return html`
     <div class="scrim sheet-scrim" onClick=${(e) => e.target === e.currentTarget && onClose && onClose()}>
-      ${turn ? html`<div class="rotview" style=${{ "--turn": turn + "deg" }} onClick=${(e) => e.target === e.currentTarget && onClose && onClose()}>${inner}</div>` : inner}
+      ${turn ? html`<div class=${"rotview" + (Math.abs(turn) === 180 ? " flip" : "")} style=${{ "--turn": turn + "deg" }} onClick=${(e) => e.target === e.currentTarget && onClose && onClose()}>${inner}</div>` : inner}
     </div>`;
 }
 

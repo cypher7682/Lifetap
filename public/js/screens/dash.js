@@ -5,6 +5,8 @@ import { Icon } from "../icons.js";
 import { usePress, Sheet, Popover, MenuItem, Segmented, IntInput, dialog, confirm, snack, toast, splash, haptic } from "../ui.js";
 import { IconPicker, ColorPicker, GridSizer } from "./pickers.js";
 import { VarSheet } from "./editor.js";
+import * as tables from "../tablestore.js";
+import { ViewSwitch } from "../viewswitch.js";
 
 // Edit mode survives a trip to the step editor and back.
 const session = new Map();
@@ -274,7 +276,7 @@ function useSlotDrag({ draggable, canDrop, onDrop }) {
  * How-many sheet. For a tile: a signed running total (−10/−1/+1/+10), applied in one go,
  * whichever button was held to open it. For a repeating macro: how many times to run (≥ 1).
  */
-function HowMany({ kind, tile, macro, turn, onDone, onClose }) {
+export function HowMany({ kind, tile, macro, turn, onDone, onClose }) {
   const isMacro = kind === "macro";
   const [n, setN] = useState(isMacro ? 1 : 0);
   const [touched, setTouched] = useState(false);
@@ -480,6 +482,7 @@ export function DashScreen({ id, nav, autoTurn }) {
   recRef.current = rec;
 
   const pending = E.hasPending(dash);
+  const liveTable = tables.current();
   const turn = mode === "play" ? autoTurn || dash.turn || 0 : 0;
   const layout = layoutFor(v.grid);
 
@@ -525,7 +528,7 @@ export function DashScreen({ id, nav, autoTurn }) {
             const { [c.tileId]: _, ...rest } = bb;
             return rest;
           });
-        }, 5300);
+        }, 4000);
       }
       return next;
     });
@@ -859,8 +862,10 @@ export function DashScreen({ id, nav, autoTurn }) {
           <${Icon} name="redo" size=${22} style=${turn ? { transform: `rotate(${turn}deg)` } : null} /></button>
         <button class="icon-btn round" aria-label="Edit dash" onClick=${() => { setBadges({}); setMode("edit"); }}>
           <${Icon} name="pencil" size=${20} style=${turn ? { transform: `rotate(${turn}deg)` } : null} /></button>
+        ${(pending || !liveTable) && html`
         <button class=${"btn btn-save" + (pending ? " on" : "")} disabled=${!pending} aria-label=${pending ? "Save changes" : "Nothing to save"} onClick=${save}>
-          <${Icon} name="save" size=${18} style=${turn ? { transform: `rotate(${turn}deg)` } : null} />Save</button>
+          <${Icon} name="save" size=${18} style=${turn ? { transform: `rotate(${turn}deg)` } : null} />Save</button>`}
+        ${liveTable && html`<${ViewSwitch} view="counters" onSwitch=${() => nav.replace({ name: "table", id: liveTable.id })} />`}
       </header>`;
 
   const { cols, rows } = v.grid;

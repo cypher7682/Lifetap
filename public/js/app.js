@@ -1,16 +1,22 @@
 import { html, render, useState, useEffect, useRef } from "../vendor/preact-htm.js";
 import * as store from "./store.js";
+import * as tables from "./tablestore.js";
 import { Overlays, setRootTurn, snack } from "./ui.js";
 import { DashList } from "./screens/list.js";
 import { NewDash } from "./screens/newdash.js";
 import { DashScreen } from "./screens/dash.js";
 import { MacroEditor } from "./screens/editor.js";
+import { TableScreen, HistoryScreen, NewTable } from "./screens/table.js";
 
 const LAST_KEY = "counter-dash:last";
 
 function useStore() {
   const [, set] = useState(0);
-  useEffect(() => store.subscribe(() => set((n) => n + 1)), []);
+  useEffect(() => {
+    const a = store.subscribe(() => set((n) => n + 1));
+    const b = tables.subscribe(() => set((n) => n + 1));
+    return () => (a(), b());
+  }, []);
 }
 
 /**
@@ -45,7 +51,8 @@ function App() {
   const [stack, setStack] = useState(() => {
     const s = [{ name: "list" }];
     const last = localStorage.getItem(LAST_KEY);
-    if (last && store.get(last)) s.push({ name: "dash", id: last });
+    if (last && last.startsWith("table:") && tables.get(last.slice(6))) s.push({ name: "table", id: last.slice(6) });
+    else if (last && store.get(last)) s.push({ name: "dash", id: last });
     return s;
   });
   const guard = useRef(null);
@@ -76,6 +83,7 @@ function App() {
 
   useEffect(() => {
     if (top.name === "dash") localStorage.setItem(LAST_KEY, top.id);
+    else if (top.name === "table") localStorage.setItem(LAST_KEY, "table:" + top.id);
     else if (top.name === "list") localStorage.removeItem(LAST_KEY);
   }, [top]);
 
@@ -109,6 +117,9 @@ function App() {
   else if (top.name === "dash" && store.get(top.id)) screenEl = html`<${DashScreen} key=${top.id} id=${top.id} nav=${nav} autoTurn=${auto.turn} />`;
   else if (top.name === "macro" && store.get(top.id)) screenEl = html`<${MacroEditor} key=${top.macroId} id=${top.id} macroId=${top.macroId} nav=${nav} />`;
   else if (top.name === "trigger" && store.get(top.id)) screenEl = html`<${MacroEditor} key=${top.triggerId} id=${top.id} tileId=${top.tileId} triggerId=${top.triggerId} nav=${nav} />`;
+  else if (top.name === "newtable") screenEl = html`<${NewTable} nav=${nav} />`;
+  else if (top.name === "table" && tables.get(top.id)) screenEl = html`<${TableScreen} key=${top.id} id=${top.id} nav=${nav} />`;
+  else if (top.name === "history" && tables.get(top.id)) screenEl = html`<${HistoryScreen} id=${top.id} nav=${nav} />`;
   else screenEl = html`<${DashList} nav=${nav} />`;
 
   // Installed on iOS, the app can be given a viewport a status-bar's height short of the
@@ -131,7 +142,7 @@ function App() {
     </div>`;
 }
 
-store.load().then(() => render(html`<${App} />`, document.getElementById("app")));
+Promise.all([store.load(), tables.load()]).then(() => render(html`<${App} />`, document.getElementById("app")));
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   // Installed apps on iOS rarely re-check for updates on their own, so check every

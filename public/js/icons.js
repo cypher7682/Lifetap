@@ -37,6 +37,15 @@ const P = {
   addsquare: html`<rect x="4" y="4" width="16" height="16" rx="4" /><path d="M12 8.5v7M8.5 12h7" />`,
   dotsv: html`<path d="M12 5.5h.01M12 12h.01M12 18.5h.01" stroke-width="3.2" />`,
   home: html`<path d="M4.5 10.5 12 4l7.5 6.5V19a1 1 0 0 1-1 1h-4v-5.5h-5V20h-4a1 1 0 0 1-1-1z" />`,
+  crown: html`<path d="M4.6 17.5 3 7.8l5.2 4.1L12 5.4l3.8 6.5L21 7.8l-1.6 9.7z" /><path d="M4.6 20.5h14.8" />`,
+  dice: html`<rect x="4" y="4" width="16" height="16" rx="3.5" /><path d="M8.6 8.6h.01M15.4 15.4h.01M12 12h.01M15.4 8.6h.01M8.6 15.4h.01" stroke-width="2.8" />`,
+  cmdr: html`<rect x="5.5" y="3" width="13" height="18" rx="2.2" /><rect x="8" y="5.8" width="8" height="6.4" rx="1" /><path d="M8 15.2h8M8 18h5" />`,
+  history: html`<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" /><path d="M4.5 4.5v4h4" /><path d="M12 8v4.2l2.8 1.8" />`,
+  sliders: html`<path d="M4.5 7h9.5M18.5 7h1M4.5 17h3M12 17h7.5" /><circle cx="16.2" cy="7" r="2.2" /><circle cx="9.8" cy="17" r="2.2" />`,
+  leave: html`<path d="M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4" /><path d="m10 8-4 4 4 4M6 12h9" />`,
+  swap: html`<path d="M5 8h13.5L15 4.5M19 16H5.5L9 19.5" />`,
+  table: html`<rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M12 5v14M3.5 12h17" />`,
+  users: html`<circle cx="9" cy="8.5" r="3.2" /><path d="M3.2 19.5c.7-3.3 3-5 5.8-5s5.1 1.7 5.8 5" /><path d="M15.2 5.6a3.2 3.2 0 0 1 0 6M17.6 14.8c1.6.7 2.7 2.3 3.1 4.7" />`,
   download: html`<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />`,
 };
 
