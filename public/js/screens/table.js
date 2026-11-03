@@ -48,11 +48,18 @@ function PlayerCard({ p, angle, isMonarch, badge, killing, onLife, onHoldLife, o
   return html`
     <div class=${"pcard c-" + p.color + turnClass(angle) + (p.dead ? " dead" : "") + (killing ? " killing" : "")}
       style=${{ "--a": angle + "deg" }} role="group" aria-label=${`${p.name}, ${p.life} life${p.dead ? ", dead" : ""}`}>
-      <div class="pc">
+      <div class="pc" style=${{ "--bot": map.rh + 10 + "px" }}>
         <button class="pc-half pc-minus" aria-label=${`${p.name} minus one life. Hold for more.`} ...${minus}><span class="pc-glyph">−</span></button>
         <button class="pc-half pc-plus" aria-label=${`${p.name} plus one life. Hold for more.`} ...${plus}><span class="pc-glyph">+</span></button>
-        <button class="pc-name" aria-label=${`Rename ${p.name}`} onClick=${onRename}><span>${p.name}</span><${Icon} name="pencil" size=${13} /></button>
-        <div class="pc-life" style=${{ "--len": len }} aria-hidden="true">${fmt(p.life)}</div>
+        <div class="pc-rows">
+          <div class="pc-top">
+            <button class="pc-name" aria-label=${`Rename ${p.name}`} onClick=${onRename}><span>${p.name}</span><${Icon} name="pencil" size=${13} /></button>
+          </div>
+          <div class="pc-life" style=${{ "--len": len }} aria-hidden="true"><span>${fmt(p.life)}</span></div>
+          <div class="pc-bottom" style=${{ width: map.rw + "px", height: map.rh + "px" }}>
+            ${!killing && html`<${CmdrMap} ...${map} victim=${p} angle=${angle} onClick=${onCmdr} />`}
+          </div>
+        </div>
         <button class=${"pc-crown" + (isMonarch ? " on" : "")} aria-label=${isMonarch ? `${p.name} is the Monarch` : `Make ${p.name} the Monarch`} onClick=${onMonarch}>
           <${Icon} name="crown" size=${20} /></button>
         ${badge ? html`<span key=${badge.k} class=${"badge delta-badge pc-badge " + (badge.n < 0 ? "neg" : "pos")}>${signed(badge.n)}</span>` : null}
@@ -63,18 +70,18 @@ function PlayerCard({ p, angle, isMonarch, badge, killing, onLife, onHoldLife, o
             <span class="pc-kill-name">${p.dead ? `Revive ${p.name}` : p.name}</span>
           </button>`}
       </div>
-      ${!killing && html`<${CmdrMap} ...${map} victim=${p} angle=${angle} onClick=${onCmdr} />`}
     </div>`;
 }
 
 /**
  * Commander damage at a glance: a little copy of the table, laid out like the real one,
- * with the damage each seat's commander has done to this player. Numbers face the card's player.
+ * with the damage each seat's commander has done to this player. It sits in the card's bottom row
+ * but is turned back to the table's real orientation; the numbers face the card's player.
  */
 function CmdrMap({ s, grid, w, h, victim, angle, onClick }) {
   const side = angle === 90 || angle === -90;
   return html`
-    <button class=${"cm-map at" + angle} style=${{ width: w + "px", height: h + "px", gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}
+    <button class="cm-map" style=${{ width: w + "px", height: h + "px", gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))`, transform: `translate(-50%, -50%) rotate(${-angle}deg)` }}
       aria-label=${`Commander damage to ${victim.name}`} onClick=${onClick}>
       ${s.seats.map((src, i) => {
         const c = grid.cells[i];
@@ -95,11 +102,16 @@ function CmdrMap({ s, grid, w, h, victim, angle, onClick }) {
     </button>`;
 }
 
-/** Map size for a card: same shape as the table area, tucked against the player's edge. */
+/**
+ * Map size for a card: same shape as the table area. Returns its real size (w, h) and the
+ * space it takes in the card's own upright frame (rw, rh), which is swapped for sideways cards.
+ */
 function mapSize(area, cardW, cardH, side) {
-  const along = side ? Math.min(cardH * 0.8 / area.h, cardW * 0.26 / area.w) : Math.min(cardH * 0.3 / area.h, cardW * 0.5 / area.w);
-  const k = Math.max(0.07, Math.min(along, 110 / Math.max(area.w, area.h)));
-  return { w: Math.round(area.w * k), h: Math.round(area.h * k) };
+  const [cw, ch] = side ? [cardH, cardW] : [cardW, cardH]; // the card as its player sees it
+  const [aw, ah] = side ? [area.h, area.w] : [area.w, area.h]; // the table as they see it
+  const k = Math.max(0.06, Math.min(ch * 0.26 / ah, cw * 0.5 / aw, 104 / Math.max(aw, ah)));
+  const w = Math.round(area.w * k), h = Math.round(area.h * k);
+  return { w, h, rw: side ? h : w, rh: side ? w : h };
 }
 
 // ---------------------------------------------------------------- commander damage
@@ -119,6 +131,7 @@ function CmdrSheet({ t, victimId, angles, onStep, onHold, onSplit, onClose }) {
   const s = T.state(t);
   const victim = s.byId[victimId];
   const grid = T.seatGrid(s.seats.length);
+  const va = angles[s.seats.findIndex((p) => p.id === victimId)] || 0; // everything faces the player taking the damage
   return html`
     <div class="scrim cm-scrim" onClick=${(e) => e.target === e.currentTarget && onClose()}>
       <div class="cm-modal" role="dialog" aria-modal="true" aria-label=${`Commander damage to ${victim.name}`}>
@@ -134,8 +147,8 @@ function CmdrSheet({ t, victimId, angles, onStep, onHold, onSplit, onClose }) {
             const self = src.id === victimId;
             const name = self ? `${src.name} (own)` : src.name;
             return html`
-              <div key=${src.id} class=${"cm-cell c-" + src.color + turnClass(angles[i]) + (self ? " self" : "")}
-                style=${{ "--a": angles[i] + "deg", gridRow: c.row + 1, gridColumn: c.span === 2 ? "1 / span 2" : c.col + 1 }}>
+              <div key=${src.id} class=${"cm-cell c-" + src.color + turnClass(va) + (self ? " self" : "")}
+                style=${{ "--a": va + "deg", gridRow: c.row + 1, gridColumn: c.span === 2 ? "1 / span 2" : c.col + 1 }}>
                 <div class="pc">
                   <div class="cm-name">${name}</div>
                   ${src.partners
