@@ -8,7 +8,8 @@
 //   POST /api/tables/:id/act              {token, cid, ops} | {token, cid, kind: "undo" | "redo"}
 //   POST /api/tables/:id/leave            {token}
 //   POST /api/tables/:id/requests/:req    owner answers a join    {token, approve, seat}
-//   POST /api/join                        ask to join             {code, name, device} → {reqId}
+//   POST /api/lookup                      seats free to pick      {code} → {seats, canAdd}
+//   POST /api/join                        ask to join             {code, name, device, seat} → {reqId}
 //   GET  /api/join/:req                   poll the answer         → {status, tableId?, token?, me?}
 //   GET  /api/health
 
@@ -149,7 +150,16 @@ const ip = (req) => String(req.headers["x-forwarded-for"] || req.socket.remoteAd
 
 function pendingRequests(entry) {
   const now = Date.now();
-  return [...entry.requests.values()].filter((r) => r.status === "pending" && now - r.created < REQUEST_TTL).map((r) => ({ reqId: r.reqId, name: r.name }));
+  const s = T.state(entry.table);
+  return [...entry.requests.values()]
+    .filter((r) => r.status === "pending" && now - r.created < REQUEST_TTL)
+    .map((r) => ({ reqId: r.reqId, name: r.name, seat: r.seat, seatName: r.seat ? s.byId[r.seat]?.name : null }));
+}
+
+/** Seats nobody has claimed yet: what a joiner can pick from. */
+function freeSeats(entry) {
+  const claimed = new Set(entry.members.map((m) => m.player));
+  return T.state(entry.table).seats.filter((p) => !claimed.has(p.id));
 }
 
 function snapshot(entry, m) {
@@ -245,13 +255,25 @@ async function route(req, res) {
     return send(res, 200, { ...snapshot(entry, m), token: tok });
   }
 
+  if (req.method === "POST" && a === "lookup" && !id) {
+    const body = await readBody(req);
+    const code = clean(body.code, 8).toLowerCase();
+    if (limited("look:" + ip(req), 10, 60 * 1000) || limited("lookcode:" + code, 30, 60 * 1000)) return send(res, 429, { error: "Too many tries. Wait a minute." });
+    const entry = live.get(byCode.get(code));
+    if (!entry) return send(res, 404, { error: "No table with that code." });
+    // names and colours only: life totals stay private until the owner lets you in
+    const seats = freeSeats(entry).map((p) => ({ id: p.id, name: p.name, color: p.color }));
+    return send(res, 200, { seats, canAdd: T.state(entry.table).seats.length < T.MAX_PLAYERS });
+  }
+
   if (req.method === "POST" && a === "join" && !id) {
     const body = await readBody(req);
     const code = clean(body.code, 8).toLowerCase();
     if (limited("join:" + ip(req), 10, 60 * 1000) || limited("joincode:" + code, 30, 60 * 1000)) return send(res, 429, { error: "Too many tries. Wait a minute." });
     const entry = live.get(byCode.get(code));
     if (!entry) return send(res, 404, { error: "No table with that code." });
-    const r = { reqId: token(), name: clean(body.name) || "", device: clean(body.device, 40), status: "pending", created: Date.now() };
+    const seat = freeSeats(entry).some((p) => p.id === body.seat) ? body.seat : null;
+    const r = { reqId: token(), name: clean(body.name) || "", device: clean(body.device, 40), seat, status: "pending", created: Date.now() };
     entry.requests.set(r.reqId, r);
     broadcast(entry, Infinity);
     return send(res, 200, { reqId: r.reqId, tableId: entry.table.id });
@@ -316,7 +338,8 @@ async function route(req, res) {
       return send(res, 200, { ok: true });
     }
     const s = T.state(entry.table);
-    let player = body.seat && s.seats.find((p) => p.id === body.seat && !entry.members.some((x) => x.player === p.id));
+    let player = body.seat && freeSeats(entry).find((p) => p.id === body.seat);
+    if (body.seat && !player) return send(res, 409, { error: "Someone's already in that seat. Pick another." });
     if (!player && s.seats.length >= T.MAX_PLAYERS) return send(res, 409, { error: `${T.MAX_PLAYERS} players is the limit.` });
     const tok = token();
     const ops = [];

@@ -348,31 +348,40 @@ function ShareSheet({ t, onClose }) {
     <//>`;
 }
 
-/** Someone wants in: seat them as a new player, as one of the unclaimed seats, or say no. */
+/** Someone wants in, to the seat they picked: allow, seat them somewhere else, or say no. */
 function JoinRequestSheet({ t, req, members, onClose }) {
   const s = T.state(t);
   const claimed = new Set(members.map((m) => m.player));
   const free = s.seats.filter((p) => !claimed.has(p.id));
   const [busy, setBusy] = useState(false);
+  const [elsewhere, setElsewhere] = useState(false);
   const go = async (approve, seat) => {
     setBusy(true);
-    try { await sync.answer(t.id, req.reqId, approve, seat); } catch (e) { toast(e.message); }
-    onClose();
+    try { await sync.answer(t.id, req.reqId, approve, seat); onClose(); }
+    catch (e) { toast(e.message); setBusy(false); setElsewhere(true); }
   };
   const who = req.name || "Someone";
+  const asked = req.seat && free.find((p) => p.id === req.seat);
+  const canAdd = s.seats.length < T.MAX_PLAYERS;
   return html`
     <${Sheet} onClose=${onClose} label="Join request">
       <h2 class="sheet-title">${who} wants to join</h2>
-      <p class="hint small">Seat them as:</p>
-      <div class="pick-list">
-        ${free.map((p) => html`
-          <button class="pick-row" disabled=${busy} onClick=${() => go(true, p.id)}>
-            <span class=${"pl-dot bg-" + p.color}></span><span class="grow">${p.name}${req.name && req.name !== p.name ? html` <span class="muted small">→ ${req.name}</span>` : ""}</span>
-          </button>`)}
-        <button class="pick-row pick-new" disabled=${busy || s.seats.length >= T.MAX_PLAYERS} onClick=${() => go(true, null)}>
-          <span class="pick-icon"><${Icon} name="plus" size=${22} /></span><span class="grow">New player</span>
-        </button>
-      </div>
+      <p class="hint">${asked ? html`They picked <b class=${"c-" + asked.color}>${asked.name}</b>’s seat${req.name && req.name !== asked.name ? `, which becomes ${req.name}` : ""}.` : "They asked for a new seat."}</p>
+      <button class="btn btn-primary btn-block" disabled=${busy || (!asked && !canAdd)} onClick=${() => go(true, asked ? asked.id : null)}>
+        <${Icon} name="check" size=${20} />Let them in</button>
+      ${!elsewhere
+        ? html`<button class="btn btn-plain btn-block" disabled=${busy} onClick=${() => setElsewhere(true)}>Seat them somewhere else</button>`
+        : html`
+          <div class="pick-list">
+            ${free.filter((p) => p !== asked).map((p) => html`
+              <button class="pick-row" disabled=${busy} onClick=${() => go(true, p.id)}>
+                <span class=${"pl-dot bg-" + p.color}></span><span class="grow">${p.name}</span>
+              </button>`)}
+            ${asked && html`
+              <button class="pick-row pick-new" disabled=${busy || !canAdd} onClick=${() => go(true, null)}>
+                <span class="pick-icon"><${Icon} name="plus" size=${22} /></span><span class="grow">New player</span>
+              </button>`}
+          </div>`}
       <button class="btn btn-danger-soft btn-block" disabled=${busy} onClick=${() => go(false)}>Don't let them in</button>
     <//>`;
 }
@@ -729,18 +738,28 @@ export function NewTable({ nav }) {
 export function JoinTable({ nav }) {
   const [code, setCode] = useState("");
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) || "");
-  const [st, setSt] = useState({ phase: "idle" }); // idle | asking | waiting | error
+  const [st, setSt] = useState({ phase: "idle" }); // idle | finding | seats | asking | waiting | error
   const alive = useRef(true);
   useEffect(() => () => (alive.current = false), []);
   const ok = /^[a-z0-9]{4}$/.test(code);
 
-  const join = async () => {
+  const find = async () => {
     if (!ok) return;
     if (name.trim()) localStorage.setItem(NAME_KEY, name.trim());
+    setSt({ phase: "finding" });
+    try {
+      const r = await sync.lookup(code);
+      if (alive.current) setSt({ phase: "seats", ...r });
+    } catch (e) {
+      setSt({ phase: "error", msg: e.message });
+    }
+  };
+
+  const join = async (seat) => {
     setSt({ phase: "asking" });
     let req;
     try {
-      req = await sync.askToJoin(code, name.trim());
+      req = await sync.askToJoin(code, name.trim(), seat);
     } catch (e) {
       return setSt({ phase: "error", msg: e.message });
     }
@@ -766,11 +785,12 @@ export function JoinTable({ nav }) {
     if (alive.current) setSt({ phase: "error", msg: "Nobody answered. Check the code and try again." });
   };
 
-  const waiting = st.phase === "asking" || st.phase === "waiting";
+  const busy = ["finding", "asking", "waiting"].includes(st.phase);
+  const locked = busy || st.phase === "seats";
   return html`
     <div class="page new-page">
       <header class="bar-head">
-        <button class="icon-btn round" aria-label="Back" onClick=${() => nav.back()}><${Icon} name="back" /></button>
+        <button class="icon-btn round" aria-label="Back" onClick=${() => (st.phase === "seats" ? setSt({ phase: "idle" }) : nav.back())}><${Icon} name="back" /></button>
         <h1 class="head-title center">Join a table</h1>
         <span class="icon-btn-spacer"></span>
       </header>
@@ -778,21 +798,35 @@ export function JoinTable({ nav }) {
         <label class="field-label" for="jt-code">Table code</label>
         <div class="code-wrap">
           <span class="code-hash" aria-hidden="true">#</span>
-          <input id="jt-code" class="input input-lg code-input" value=${code} maxlength="4" placeholder="ab12" disabled=${waiting}
+          <input id="jt-code" class="input input-lg code-input" value=${code} maxlength="4" placeholder="ab12" disabled=${locked}
             autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text"
             onInput=${(e) => { const v = e.currentTarget.value.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 4); e.currentTarget.value = v; setCode(v); }}
-            onKeyDown=${(e) => e.key === "Enter" && join()} />
+            onKeyDown=${(e) => e.key === "Enter" && find()} />
         </div>
         <label class="field-label" for="jt-name">Your name <span class="muted small">(optional)</span></label>
-        <input id="jt-name" class="input input-lg" value=${name} maxlength="24" placeholder="Your name" disabled=${waiting}
-          onInput=${(e) => setName(e.currentTarget.value)} onKeyDown=${(e) => e.key === "Enter" && join()} />
-        ${waiting && html`<div class="join-wait"><span class="spinner" aria-hidden="true"></span>${st.phase === "asking" ? "Finding the table…" : "Waiting for the table owner to let you in…"}</div>`}
+        <input id="jt-name" class="input input-lg" value=${name} maxlength="24" placeholder="Your name" disabled=${locked}
+          onInput=${(e) => setName(e.currentTarget.value)} onKeyDown=${(e) => e.key === "Enter" && find()} />
+
+        ${st.phase === "seats" && html`
+          <div class="field-label">Where are you sitting?</div>
+          <div class="pick-list">
+            ${st.seats.map((p) => html`
+              <button class="pick-row" onClick=${() => join(p.id)}>
+                <span class=${"pl-dot bg-" + p.color}></span><span class="grow">${p.name}${name.trim() && name.trim() !== p.name ? html` <span class="muted small">→ ${name.trim()}</span>` : ""}</span>
+              </button>`)}
+            ${st.canAdd && html`
+              <button class="pick-row pick-new" onClick=${() => join(null)}>
+                <span class="pick-icon"><${Icon} name="plus" size=${22} /></span><span class="grow">New seat</span>
+              </button>`}
+            ${!st.seats.length && !st.canAdd && html`<p class="hint">That table is full.</p>`}
+          </div>`}
+        ${busy && html`<div class="join-wait"><span class="spinner" aria-hidden="true"></span>${st.phase === "waiting" ? "Waiting for the table owner to let you in…" : "Finding the table…"}</div>`}
         ${st.phase === "error" && html`<div class="field-err join-err">${st.msg}</div>`}
       </div>
       <div class="foot">
-        ${waiting
+        ${busy
           ? html`<button class="btn btn-plain btn-block btn-xl" onClick=${() => { alive.current = false; nav.back(); }}>Cancel</button>`
-          : html`<button class="btn btn-primary btn-block btn-xl" disabled=${!ok} onClick=${join}>Join table</button>`}
+          : st.phase !== "seats" && html`<button class="btn btn-primary btn-block btn-xl" disabled=${!ok} onClick=${find}>Next</button>`}
       </div>
     </div>`;
 }

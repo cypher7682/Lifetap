@@ -30,15 +30,22 @@ assert.equal(sA.msgs[0].type, "snapshot");
 
 // join: bad code, then real code; owner seats them as Player 2
 assert.equal((await post("/api/join", { code: "zzzz", name: "x" }))[0], 404);
-let [, jr] = await post("/api/join", { code: made.table.code, name: "Dave", device: "devB" });
+let [, look] = await post("/api/lookup", { code: made.table.code });
+assert.deepEqual(look.seats.map((p) => p.name), ["Player 2", "Sam"], "only unclaimed seats, owner's excluded");
+assert.equal(look.seats[0].life, undefined, "no life totals before you're let in");
+let [, jr] = await post("/api/join", { code: made.table.code, name: "Dave", device: "devB", seat: look.seats[0].id });
 await wait(150);
 const reqMsg = sA.msgs.at(-1);
-assert.deepEqual(reqMsg.requests.map((r) => r.name), ["Dave"]);
+assert.deepEqual(reqMsg.requests.map((r) => [r.name, r.seatName]), [["Dave", "Player 2"]]);
 assert.equal((await get(`/api/join/${jr.reqId}`))[1].status, "pending");
 const seat = T.state(made.table).seats[1].id;
 assert.equal((await post(`/api/tables/${id}/requests/${jr.reqId}`, { token: "nope", approve: true }))[0], 403);
 assert.equal((await post(`/api/tables/${id}/requests/${jr.reqId}`, { token: owner, approve: true, seat }))[0], 200);
 let [, ans] = await get(`/api/join/${jr.reqId}`);
+// a second joiner asking for the same seat gets told it's gone when the owner tries it
+let [, jr2] = await post("/api/join", { code: made.table.code, name: "Eve", device: "devC", seat });
+assert.equal((await post(`/api/tables/${id}/requests/${jr2.reqId}`, { token: owner, approve: true, seat }))[0], 409);
+assert.deepEqual((await post("/api/lookup", { code: made.table.code }))[1].seats.map((p) => p.name), ["Sam"]);
 assert.equal(ans.status, "approved"); assert.equal(ans.me, seat);
 const dave = ans.token;
 const sB = stream(id, dave);

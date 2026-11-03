@@ -143,8 +143,11 @@ export async function create({ names, startLife }) {
   return res.table.id;
 }
 
-export async function askToJoin(code, name) {
-  return call("/api/join", { code: code.trim().toLowerCase(), name, device: tables.deviceId });
+/** Seats still free at a table, for the joiner to pick from. */
+export const lookup = (code) => call("/api/lookup", { code: code.trim().toLowerCase() });
+
+export async function askToJoin(code, name, seat) {
+  return call("/api/join", { code: code.trim().toLowerCase(), name, seat, device: tables.deviceId });
 }
 export const joinStatus = (reqId) => call(`/api/join/${reqId}`);
 
