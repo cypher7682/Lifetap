@@ -24,9 +24,10 @@ function cryptoRandom() {
 }
 
 /** names[0] is this device's player and the owner. */
-export function createTable({ names, startLife = DEFAULT_LIFE, by, now = Date.now(), code = newCode() }) {
+export function createTable({ names, startLife = DEFAULT_LIFE, by, now = Date.now(), code = newCode(), rand = cryptoRandom }) {
   const players = names.map((name, i) => ({ id: "p" + rid(), name, color: PLAYER_COLORS[i % PLAYER_COLORS.length] }));
   const ops = [{ op: "settings", startLife }, ...players.map((p) => ({ op: "add", p }))];
+  if (players.length) ops.push({ op: "first", p: players[Math.floor(rand() * players.length)].id });
   return {
     id: "t" + rid(),
     code,
@@ -75,8 +76,12 @@ export function state(table) {
   const hit = cache.get(table.events);
   if (hit) return hit;
   const { done, undone } = stacks(table.events);
-  const s = { startLife: DEFAULT_LIFE, byId: {}, order: [], monarch: null };
-  for (const e of [...done].sort((a, b) => a.seq - b.seq)) for (const op of e.ops) applyOp(s, op);
+  const s = { startLife: DEFAULT_LIFE, byId: {}, order: [], monarch: null, first: null, firstSeq: 0 };
+  for (const e of [...done].sort((a, b) => a.seq - b.seq))
+    for (const op of e.ops) {
+      applyOp(s, op);
+      if (op.op === "first" && s.first === op.p) s.firstSeq = e.seq;
+    }
   const players = s.order.map((id) => s.byId[id]);
   const out = {
     startLife: s.startLife,
@@ -84,6 +89,8 @@ export function state(table) {
     seats: players.filter((p) => !p.removed),
     byId: s.byId,
     monarch: s.monarch,
+    first: s.first, // who went first, picked at the start and on every reset
+    firstSeq: s.firstSeq, // the event that picked them (drives the spin animation)
     done,
     undone,
     undoable: [...done].reverse().find((e) => e.kind === "action") || null,
@@ -110,6 +117,10 @@ function applyOp(s, o) {
     case "reset":
       for (const id of s.order) Object.assign(P[id], { life: s.startLife, cmdr: {}, dead: false });
       s.monarch = null;
+      s.first = null;
+      return;
+    case "first":
+      if (live(P, o.p)) s.first = o.p;
       return;
     case "monarch":
       if (o.p && !live(P, o.p)) return;
@@ -122,6 +133,7 @@ function applyOp(s, o) {
     case "remove":
       p.removed = true;
       if (s.monarch === p.id) s.monarch = null;
+      if (s.first === p.id) s.first = null;
       return;
     case "rename":
       p.name = o.name;
@@ -189,6 +201,26 @@ export function act(table, ops, by, now = Date.now()) {
   return { ...table, updatedAt: now, events };
 }
 
+/** Ops for a reset: everything back to the start, and a new first player. */
+export function resetOps(table, rand = cryptoRandom) {
+  const seats = state(table).seats;
+  return [{ op: "reset" }, ...(seats.length ? [{ op: "first", p: seats[Math.floor(rand() * seats.length)].id }] : [])];
+}
+
+/**
+ * Seat indices clockwise round the table (portrait): down the right column,
+ * across any full-width rows at the bottom, back up the left.
+ */
+export function clockwise(n) {
+  const { cells } = seatGrid(n);
+  const idx = cells.map((c, i) => ({ c, i }));
+  if (n <= 2) return idx.map((x) => x.i);
+  const right = idx.filter((x) => x.c.span === 1 && x.c.col === 1);
+  const full = idx.filter((x) => x.c.span === 2);
+  const left = idx.filter((x) => x.c.span === 1 && x.c.col === 0).reverse();
+  return [...right, ...full, ...left].map((x) => x.i);
+}
+
 export function undo(table, by, now = Date.now()) {
   const e = state(table).undoable;
   return e ? append(table, { by, kind: "undo", target: e.seq }, now) : table;
@@ -232,18 +264,22 @@ export function describeOp(s, o) {
     case "monarch":
       return o.p ? `${name(o.p)} is Monarch${o.was ? ` (was ${name(o.was)})` : ""}` : `Nobody is Monarch${o.was ? ` (was ${name(o.was)})` : ""}`;
     case "reset": return "Table reset";
+    case "first": return `${name(o.p)} goes first`;
   }
   return o.op;
 }
 
 export function describe(table, e) {
   const s = state(table);
-  if (e.kind === "start") return "Table started";
+  if (e.kind === "start") {
+    const f = e.ops.find((o) => o.op === "first");
+    return "Table started" + (f ? ` · ${describeOp(s, f)}` : "");
+  }
   if (e.kind === "undo" || e.kind === "redo") {
     const t = table.events.find((x) => x.seq === e.target);
     return `${e.kind === "undo" ? "Undid" : "Redid"}: ${t ? describe(table, t) : "#" + e.target}`;
   }
-  return e.ops.map((o) => describeOp(s, o)).join(", ");
+  return e.ops.map((o) => describeOp(s, o)).join(", ").replace("Table reset, ", "Table reset · ");
 }
 
 // ---------------------------------------------------------------- layout

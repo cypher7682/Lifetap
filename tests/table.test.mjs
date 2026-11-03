@@ -132,3 +132,18 @@ test("TTL", () => {
   assert.equal(T.expired(t, T.TTL_MS), false);
   assert.equal(T.expired(t, T.TTL_MS + 1), true);
 });
+
+test("first player: picked at the start, re-picked on reset, undo restores the old one", () => {
+  let t = T.createTable({ names: ["A", "B", "C"], by: "A", now: 0, code: "ab12", rand: () => 0.5 });
+  const [a, b, c] = ids(t);
+  assert.equal(T.state(t).first, b);
+  assert.match(T.describe(t, t.events[0]), /Table started · B goes first/);
+  t = T.act(t, T.resetOps(t, () => 0.9), "A", 10);
+  assert.equal(T.state(t).first, c);
+  assert.equal(T.describe(t, t.events[1]), "Table reset · C goes first");
+  t = T.undo(t, "A", 20);
+  assert.equal(T.state(t).first, b);
+  t = T.act(t, [{ op: "remove", p: b }], "A", 30);
+  assert.equal(T.state(t).first, null);
+  assert.deepEqual(T.clockwise(5), [1, 3, 4, 2, 0]);
+});

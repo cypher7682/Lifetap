@@ -780,7 +780,8 @@ h1, h2, p { margin: 0; }
   font-size: min(17px, 13cqh); font-weight: 560; color: currentColor;
 }
 .pc-name span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-name .ic { opacity: .55; flex: none; }
+.pc-name .pc-pencil { opacity: .55; flex: none; }
+.pc-first { flex: none; color: var(--amber); fill: var(--amber); }
 .pc-life {
   flex: 1; min-height: 0; align-self: stretch; container-type: size; display: grid; place-items: center;
   font-weight: 560; font-variant-numeric: tabular-nums; letter-spacing: -.035em; line-height: 1; color: var(--text);
@@ -940,3 +941,10 @@ h1, h2, p { margin: 0; }
 .cmm-cell.lethal { background: rgba(229, 72, 77, .35); }
 .cmm-cell.lethal .cmm-val { color: #fff; }
 .pcard.dead .cm-map { opacity: .3; }
+
+/* first-player spin */
+.pcard { transition: box-shadow .08s, transform .08s; }
+.pcard.spin-hi { box-shadow: 0 0 0 3px var(--amber), 0 0 24px rgba(226, 179, 65, .35); }
+.pcard.spin-landed { box-shadow: 0 0 0 3px var(--amber), 0 0 28px rgba(226, 179, 65, .45); animation: land-bounce .7s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes land-bounce { 0% { transform: scale(1); } 30% { transform: scale(1.06); } 60% { transform: scale(.97); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pcard.spin-landed { animation: none; } }

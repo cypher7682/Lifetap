@@ -41,19 +41,20 @@ const turnClass = (a) => (a === 90 || a === -90 ? " side" : a === 180 ? " flip" 
 
 // ---------------------------------------------------------------- player card
 
-function PlayerCard({ p, angle, isMonarch, badge, killing, onLife, onHoldLife, onCmdr, onRename, onMonarch, onKill, map }) {
+function PlayerCard({ p, angle, isMonarch, isFirst, spin, badge, killing, onLife, onHoldLife, onCmdr, onRename, onMonarch, onKill, map }) {
   const minus = usePress({ onTap: () => onLife(-1), onLong: () => onHoldLife(-1), disabled: killing });
   const plus = usePress({ onTap: () => onLife(1), onLong: () => onHoldLife(1), disabled: killing });
   const len = Math.max(1, fmt(p.life).length);
   return html`
-    <div class=${"pcard c-" + p.color + turnClass(angle) + (p.dead ? " dead" : "") + (killing ? " killing" : "")}
+    <div class=${"pcard c-" + p.color + turnClass(angle) + (p.dead ? " dead" : "") + (killing ? " killing" : "") + (spin ? " spin-" + spin : "")}
       style=${{ "--a": angle + "deg" }} role="group" aria-label=${`${p.name}, ${p.life} life${p.dead ? ", dead" : ""}`}>
       <div class="pc" style=${{ "--bot": map.rh + 10 + "px" }}>
         <button class="pc-half pc-minus" aria-label=${`${p.name} minus one life. Hold for more.`} ...${minus}><span class="pc-glyph">−</span></button>
         <button class="pc-half pc-plus" aria-label=${`${p.name} plus one life. Hold for more.`} ...${plus}><span class="pc-glyph">+</span></button>
         <div class="pc-rows">
           <div class="pc-top">
-            <button class="pc-name" aria-label=${`Rename ${p.name}`} onClick=${onRename}><span>${p.name}</span><${Icon} name="pencil" size=${13} /></button>
+            <button class="pc-name" aria-label=${`Rename ${p.name}${isFirst ? " (went first)" : ""}`} onClick=${onRename}>
+              ${isFirst && html`<${Icon} name="star" size=${15} class="pc-first" />`}<span>${p.name}</span><${Icon} name="pencil" size=${13} class="pc-pencil" /></button>
           </div>
           <div class="pc-life" style=${{ "--len": len }} aria-hidden="true"><span>${fmt(p.life)}</span></div>
           <div class="pc-bottom" style=${{ width: map.rw + "px", height: map.rh + "px" }}>
@@ -394,6 +395,33 @@ export function TableScreen({ id, nav }) {
     return () => clearTimeout(h);
   }, [last && last.tEnd]);
 
+  // spin round the table to whoever goes first, when a start or reset has just picked them
+  const [spin, setSpin] = useState(null); // {i: seat index, landed}
+  const seenFirst = useRef(null);
+  useEffect(() => {
+    if (seenFirst.current === s.firstSeq) return;
+    // on opening the table, only spin for a pick made just now; after that, for any newer pick (not undos)
+    const fresh = seenFirst.current === null
+      ? Date.now() - (t.events.find((e) => e.seq === s.firstSeq)?.t || 0) < 3000
+      : s.firstSeq > seenFirst.current;
+    seenFirst.current = s.firstSeq;
+    const target = s.seats.findIndex((p) => p.id === s.first);
+    if (!fresh || target < 0) return;
+    const order = T.clockwise(s.seats.length);
+    const n = order.length;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const total = reduce || n < 2 ? 0 : 2 * n + order.indexOf(target);
+    const timers = [];
+    let at = 0;
+    for (let k = 0; k < total; k++) {
+      at += 55 + 300 * (k / total) ** 3; // slows down as it lands
+      timers.push(setTimeout(() => setSpin({ i: order[k % n] }), at));
+    }
+    timers.push(setTimeout(() => { setSpin({ i: target, landed: true }); haptic(); }, at + 160));
+    timers.push(setTimeout(() => setSpin(null), at + 1300));
+    return () => timers.forEach(clearTimeout);
+  }, [s.firstSeq]);
+
   const grid = T.seatGrid(s.seats.length);
   const angles = grid.cells.map((c) => (size.w ? T.facing(c, grid.rows, size.w, size.h) : 0));
 
@@ -434,7 +462,7 @@ export function TableScreen({ id, nav }) {
         ${t.myDash && store.get(t.myDash) && html`<${MenuItem} icon="layers" label="Change my dash" onClick=${() => setSheet({ type: "pick" })} />`}
         <${MenuItem} icon="reset" label="Reset table" onClick=${async () => {
           close();
-          if (await confirm("Reset table?", `Everyone back to ${s.startLife} life, commander damage cleared, everyone alive. Undo brings it all back.`, "Reset", true)) act([{ op: "reset" }]);
+          if (await confirm("Reset table?", `Everyone back to ${s.startLife} life, commander damage cleared, everyone alive, and a new first player. Undo brings it all back.`, "Reset", true)) act(T.resetOps(t));
         }} />
         <${MenuItem} icon="leave" label="Leave table" kind="danger" onClick=${leave} />
       <//>`;
@@ -495,7 +523,8 @@ export function TableScreen({ id, nav }) {
           const badge = deltas[p.id] ? { n: deltas[p.id], k: last.seq } : null;
           return html`
             <div key=${p.id} class="seat" style=${{ gridRow: c.row + 1, gridColumn: c.span === 2 ? "1 / span 2" : c.col + 1 }}>
-              <${PlayerCard} p=${p} angle=${angles[i]} isMonarch=${s.monarch === p.id} badge=${badge} killing=${killing}
+              <${PlayerCard} p=${p} angle=${angles[i]} isMonarch=${s.monarch === p.id} isFirst=${s.first === p.id && !(spin && !spin.landed)}
+                spin=${spin && spin.i === i ? (spin.landed ? "landed" : "hi") : null} badge=${badge} killing=${killing}
                 map=${{ s, grid, ...mapSize(size, (size.w / 2) * c.span, size.h / grid.rows, angles[i] === 90 || angles[i] === -90) }}
                 onRename=${() => setSheet({ type: "rename", p: p.id })}
                 onLife=${(d) => act([{ op: "life", p: p.id, d }])}
@@ -577,15 +606,11 @@ export function NewTable({ nav }) {
   const [me, setMe] = useState(() => localStorage.getItem(NAME_KEY) || "");
   const [others, setOthers] = useState(["", "", ""]);
   const [life, setLife] = useState(T.DEFAULT_LIFE);
-  const [tried, setTried] = useState(false);
-  const err = tried && !me.trim();
   const setOther = (i, v) => setOthers((o) => o.map((x, j) => (j === i ? v : x)));
   const addRow = () => (others.length + 1 >= T.MAX_PLAYERS ? tooManyPlayers() : setOthers([...others, ""]));
   const start = () => {
-    setTried(true);
-    if (!me.trim()) return document.getElementById("nt-me")?.focus();
-    localStorage.setItem(NAME_KEY, me.trim());
-    const names = [me.trim(), ...others.map((n, i) => n.trim() || `Player ${i + 2}`)];
+    if (me.trim()) localStorage.setItem(NAME_KEY, me.trim());
+    const names = [me.trim() || "Player 1", ...others.map((n, i) => n.trim() || `Player ${i + 2}`)];
     const t = T.createTable({ names, startLife: life, by: tables.deviceId });
     tables.put(t);
     nav.replace({ name: "table", id: t.id });
@@ -598,10 +623,9 @@ export function NewTable({ nav }) {
         <span class="icon-btn-spacer"></span>
       </header>
       <div class="scroll">
-        <label class="field-label" for="nt-me">Your name</label>
-        <input id="nt-me" class=${"input input-lg" + (err ? " invalid" : "")} value=${me} maxlength="24" placeholder="e.g. Tim"
+        <label class="field-label" for="nt-me">Your name <span class="muted small">(optional)</span></label>
+        <input id="nt-me" class="input input-lg" value=${me} maxlength="24" placeholder="Player 1"
           onInput=${(e) => setMe(e.currentTarget.value)} onKeyDown=${(e) => e.key === "Enter" && e.currentTarget.blur()} />
-        ${err && html`<div class="field-err">Put your name in.</div>`}
 
         <div class="field-label">Other players</div>
         <div class="pl-list">
