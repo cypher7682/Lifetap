@@ -510,14 +510,14 @@ export function TableScreen({ id, nav }) {
 
   return html`
     <div class="page table-page">
-      <header class="table-head">
+      <header class="dash-head table-head">
         <button class="icon-btn" aria-label="Back to home" onClick=${() => nav.back()}><${Icon} name="back" /></button>
         <button class="head-title title-btn" aria-label=${`Table ${t.code}. Menu`} onClick=${(e) => setSheet({ type: "menu", anchor: e.currentTarget })}>
           <span class="title-text">Table: <span class="tbl-code">#${t.code}</span></span><${Icon} name="chevdown" size=${18} class="title-chev" /></button>
         ${owner && html`<span class="owner-chip" title="Table owner"><${Icon} name="crown" size=${16} /><span>${owner.name}</span></span>`}
         <${ViewSwitch} view="life" onSwitch=${() => goCounters(t, nav, () => setSheet({ type: "pick" }))} />
       </header>
-      <div class=${"table-area" + (killing ? " kill-mode" : "")} ref=${area} style=${{ gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}>
+      <div class=${"table-area" + (killing ? " kill-mode" : "") + (s.seats.length > 6 ? " many" : "")} ref=${area} style=${{ gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}>
         ${size.w > 0 && s.seats.map((p, i) => {
           const c = grid.cells[i];
           const badge = deltas[p.id] ? { n: deltas[p.id], k: last.seq } : null;
@@ -540,13 +540,25 @@ export function TableScreen({ id, nav }) {
             <button class="btn btn-primary" onClick=${() => setSheet({ type: "players" })}><${Icon} name="plus" size=${20} />Add players</button>
           </div>`}
       </div>
-      <nav class="table-rail">
-        <button class="icon-btn round" aria-label="Dice and coin" onClick=${() => setSheet({ type: "dice" })}><${Icon} name="dice" size=${22} /></button>
-        <button aria-label=${s.undoable ? `Undo ${T.describe(t, s.undoable)}. Hold for history.` : "Nothing to undo. Hold for history."} ...${undoPress}
-          class=${"icon-btn round" + (s.undoable ? "" : " soft-off")}><${Icon} name="undo" size=${22} /></button>
-        <button class="icon-btn round" aria-label=${s.redoable ? `Redo ${T.describe(t, s.redoable)}` : "Nothing to redo"} disabled=${!s.redoable} onClick=${doRedo}><${Icon} name="redo" size=${22} /></button>
-        <button class=${"icon-btn round kill-btn" + (killing ? " on" : "")} aria-pressed=${killing} aria-label=${killing ? "Cancel kill mode" : "Kill a player"}
-          disabled=${!s.seats.length} onClick=${() => setKilling(!killing)}><${Icon} name="skull" size=${22} /></button>
+      <nav class="macro-bar table-rail" aria-label="Table tools">
+        <div class="slot">
+          <button class="slot-btn rail-btn" aria-label="Dice and coin" onClick=${() => setSheet({ type: "dice" })}><${Icon} name="dice" size=${24} /></button>
+          <span class="slot-label muted">Dice</span>
+        </div>
+        <div class="slot">
+          <button aria-label=${s.undoable ? `Undo ${T.describe(t, s.undoable)}. Hold for history.` : "Nothing to undo. Hold for history."} ...${undoPress}
+            class=${"slot-btn rail-btn" + (s.undoable ? "" : " off")}><${Icon} name="undo" size=${24} /></button>
+          <span class="slot-label muted">Undo</span>
+        </div>
+        <div class="slot">
+          <button class="slot-btn rail-btn" aria-label=${s.redoable ? `Redo ${T.describe(t, s.redoable)}` : "Nothing to redo"} disabled=${!s.redoable} onClick=${doRedo}><${Icon} name="redo" size=${24} /></button>
+          <span class="slot-label muted">Redo</span>
+        </div>
+        <div class="slot">
+          <button class=${"slot-btn rail-btn kill-btn" + (killing ? " on" : "")} aria-pressed=${killing} aria-label=${killing ? "Cancel kill mode" : "Kill a player"}
+            disabled=${!s.seats.length} onClick=${() => setKilling(!killing)}><${Icon} name="skull" size=${24} /></button>
+          <span class=${"slot-label" + (killing ? " rec" : " muted")}>${killing ? "Cancel" : "Kill"}</span>
+        </div>
       </nav>
       ${sheetEl}
     </div>`;

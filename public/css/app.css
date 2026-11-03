@@ -139,7 +139,7 @@ h1, h2, p { margin: 0; }
 .dash-head { display: flex; align-items: center; gap: 5px; padding: 10px 10px 10px 2px; min-height: 66px; flex: none; }
 .dash-head > .icon-btn:first-child { width: 38px; }
 .dash-head .btn-save { padding: 0 11px 0 9px; gap: 4px; }
-.title-btn { text-align: left; padding: 8px 2px; border-radius: 10px; font-size: 21px; display: flex; align-items: center; gap: 2px; }
+.title-btn { text-align: left; padding: 8px 2px; border-radius: 10px; font-size: 21px; font-weight: 560; display: flex; align-items: center; gap: 2px; }
 .title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .title-chev { color: var(--muted); margin-top: 2px; }
 .edit-head { padding-left: 16px; gap: 8px; }
@@ -738,25 +738,24 @@ h1, h2, p { margin: 0; }
 .tbl-code-home { letter-spacing: .03em; font-variant-numeric: tabular-nums; }
 
 /* ---------- table screen */
-.table-page { padding-bottom: var(--safe-bottom); }
-.table-head { display: flex; align-items: center; gap: 4px; padding: 8px 12px 8px 2px; min-height: 58px; flex: none; }
-.table-head .icon-btn:first-child { width: 38px; }
-.table-head .head-title { font-weight: 520; font-size: 20px; }
+
+.table-head .head-title { font-weight: 560; }
 .tbl-code { color: var(--teal); font-weight: 560; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
 .owner-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 30%; flex: none; padding: 6px 10px; border-radius: 16px; background: rgba(226, 179, 65, .12); color: var(--amber); font-size: 14px; font-weight: 600; }
 .owner-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.table-area { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 10px; }
+.table-area { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 12px; }
+.table-area.many { gap: 8px; padding: 0 10px 10px; }
 .seat { min-width: 0; min-height: 0; }
 .table-empty { grid-column: 1 / span 2; align-self: center; text-align: center; color: var(--muted); display: grid; gap: 14px; justify-items: center; }
-.table-rail { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; }
-.table-rail .icon-btn.round { width: 48px; height: 48px; }
-.icon-btn.round.soft-off { color: #555a64; }
-.kill-btn.on { background: var(--red); border-color: var(--red); color: #fff; }
+.rail-btn { border: 2px solid var(--line-2); background: var(--surface-2); color: var(--text); }
+.rail-btn:active { transform: scale(.94); }
+.rail-btn:disabled, .rail-btn.off { background: transparent; border-style: dashed; color: #555a64; }
+.rail-btn.kill-btn.on { background: var(--red); border-color: var(--red); color: #fff; }
 
 /* a card faces its player: .pc is the upright content, rotated by --a (side cards swap width/height) */
 .pcard, .cm-cell {
   position: relative; width: 100%; height: 100%; container-type: size; overflow: hidden;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 22px;
 }
 .pc { position: absolute; inset: 0; container-type: size; }
 .side > .pc { inset: auto; left: 50%; top: 50%; width: 100cqh; height: 100cqw; transform: translate(-50%, -50%) rotate(var(--a)); }
