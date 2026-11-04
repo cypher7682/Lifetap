@@ -300,13 +300,15 @@ export function HowMany({ kind, tile, macro, turn, onDone, onClose }) {
             : html`${fmt(tile.value)} → <b class=${n > 0 ? "t-teal" : n < 0 ? "t-red" : ""}>${fmt(preview)}</b>${tooFar ? " · can't go below 0" : ""}`}</div>
         </div>
       </div>
-      <div class=${"hm-big " + cls} aria-live="polite">${isMacro ? "×" + n : signed(n)}</div>
-      <div class="hm-cap">${isMacro && !touched ? "use the buttons below to change how many times" : "running total"}</div>
+      <div class="hm-row">
+        <button class="btn hm-pm" aria-label="One less" disabled=${isMacro && n <= 1} onClick=${() => bump(-1)}><${Icon} name="minus" size=${28} /></button>
+        <div class=${"hm-big " + cls} style=${{ "--len": (isMacro ? "×" + n : signed(n)).length }} aria-live="polite">${isMacro ? "×" + n : signed(n)}</div>
+        <button class="btn hm-pm" aria-label="One more" onClick=${() => bump(1)}><${Icon} name="plus" size=${28} /></button>
+      </div>
+      <div class="hm-cap">${isMacro && !touched ? "use the buttons to change how many times" : "running total"}</div>
       <div class="hm-btns">
-        <button class="btn btn-num" disabled=${isMacro && n <= 1} onClick=${() => bump(-10)}>−10</button>
-        <button class="btn btn-num" disabled=${isMacro && n <= 1} onClick=${() => bump(-1)}>−1</button>
-        <button class="btn btn-num" onClick=${() => bump(1)}>+1</button>
-        <button class="btn btn-num" onClick=${() => bump(10)}>+10</button>
+        ${[-100, -10, 10, 100].map((d) => html`
+          <button class="btn btn-num" disabled=${isMacro && d < 0 && n <= 1} onClick=${() => bump(d)}>${d < 0 ? "−" + -d : "+" + d}</button>`)}
       </div>
       <div class="hm-actions">
         <button class="btn btn-cancel" aria-label="Cancel" onClick=${onClose}><${Icon} name="x" /></button>

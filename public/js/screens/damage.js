@@ -36,8 +36,8 @@ function DmgCard({ p, n, self, cell, onStep }) {
         <button class="dmg-pm" aria-label=${`One more damage to ${p.name}`} ...${plus}>+</button>
       </div>
       <div class="dmg-tens">
-        <button class="dmg-ten" disabled=${n <= 0} onClick=${() => onStep(-10)}>−10</button>
-        <button class="dmg-ten" onClick=${() => onStep(10)}>+10</button>
+        ${[-100, -10, 10, 100].map((d) => html`
+          <button class="dmg-ten" disabled=${d < 0 && n <= 0} onClick=${() => onStep(d)}>${d < 0 ? "−" + -d : "+" + d}</button>`)}
       </div>
     </div>`;
 }

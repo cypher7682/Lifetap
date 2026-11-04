@@ -375,7 +375,7 @@ h1, h2, p { margin: 0; }
 .hm-title { font-size: 19px; font-weight: 680; }
 .hm-sub { font-size: 14px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .hm-sub b { font-weight: 680; }
-.hm-big { text-align: center; font-size: 88px; font-weight: 700; line-height: 1.05; margin-top: 18px; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.hm-big { flex: 1; min-width: 0; text-align: center; font-size: 88px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
 .hm-add { color: var(--teal); }
 .hm-take { color: var(--red-text); }
 .hm-macro { color: #4a4e58; }
@@ -479,7 +479,9 @@ h1, h2, p { margin: 0; }
 .rotview { justify-content: center; }
 .rotview .sheet { max-width: 560px; }
 .rotview .hm-head { margin: 0; }
-.rotview .hm-big { font-size: 58px; margin-top: 4px; }
+.rotview .hm-big { font-size: 58px; }
+.rotview .hm-row { margin-top: 4px; }
+.rotview .hm-pm { height: 58px; }
 .rotview .hm-cap { margin: 0 0 10px; }
 .rotview .btn-num { height: 50px; }
 .rotview .hm-actions { margin-top: 10px; }
@@ -1007,3 +1009,12 @@ h1, h2, p { margin: 0; }
 .dmg-part { margin-left: auto; margin-right: 12px; }
 .dmg-actions { margin-top: 12px; }
 .choice-dmg .ic { color: var(--red-text); }
+
+/* how-many: − and + either side of the number, big steps underneath */
+.hm-row { display: flex; align-items: center; gap: 10px; margin-top: 18px; container-type: inline-size; }
+.hm-row .hm-big { font-size: min(88px, calc((100cqw - 172px) / (var(--len) * .62))); }
+.rotview .hm-row .hm-big { font-size: min(58px, calc((100cqw - 172px) / (var(--len) * .62))); }
+.hm-pm { width: 76px; height: 76px; padding: 0; flex: none; border-radius: 20px; }
+.hm-pm:disabled { opacity: .35; }
+.dmg-tens { gap: 5px; }
+.dmg-ten { max-width: none; padding: 0; font-size: 13px; }
