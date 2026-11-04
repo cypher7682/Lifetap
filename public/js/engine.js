@@ -144,7 +144,15 @@ export function newVarsBox(show = []) {
 }
 
 /** Damage tile: opens the table's damage allocation. No state of its own. */
+/** A table step from a tile key and a change. A "~pp" suffix on a random pick means per point. */
+export function keyTableStep(key, d) {
+  const perPoint = key.endsWith("~pp");
+  const step = { target: keyTableRef(perPoint ? key.slice(0, -3) : key), op: d > 0 ? "+" : "-", value: Math.abs(d) };
+  return perPoint ? { ...step, perPoint: true } : step;
+}
+
 export function keyTableRef(key) {
+  if (key.endsWith("~pp")) key = key.slice(0, -3);
   const bar = key.indexOf("|");
   const stat = bar >= 0 ? key.slice(0, bar) : "life";
   const who = bar >= 0 ? key.slice(bar + 1) : key;
@@ -397,6 +405,8 @@ export function nextMacroName(s) {
 // (any other name) changes that player counter. Who is picked each time the step runs,
 // so a random target is re-rolled on every repeat.
 export const TABLE_WHO = ["opponents", "opponentRandom", "playerRandom", "me", "all"];
+/** Random picks can be "per point" (each point rolled separately) or the total to one pick. */
+export const RANDOM_WHO = new Set(["opponentRandom", "playerRandom"]);
 export const tableRef = (who, name, stat = "life") => (who === "name" ? { kind: "table", stat, who, name } : { kind: "table", stat, who });
 const statOf = (ref) => (!ref.stat || ref.stat.toLowerCase() === "life" ? "life" : ref.stat);
 
@@ -555,9 +565,15 @@ function execSteps(ctx, macro, change) {
       const v = literal ? toInt(step.value) : read(step.value);
       // a quick table (offline, just for counters) has no life to change
       if (!ctx.table || (ctx.table.quick && statOf(step.target) === "life")) { ctx.tableSkipped++; continue; }
+      const d = step.op === "+" ? v : -v;
+      if (step.perPoint && RANDOM_WHO.has(step.target.who)) {
+        // per point: every point is its own roll, so the total spreads out
+        for (let k = 0; k < Math.abs(d); k++) for (const p of tableTargets(ctx.table, step.target)) ctx.tableOps.push({ p: p.id, stat: statOf(step.target), d: Math.sign(d) });
+        continue;
+      }
       const hit = tableTargets(ctx.table, step.target);
       if (!hit.length && step.target.who === "name") ctx.missing.add(step.target.name);
-      for (const p of hit) ctx.tableOps.push({ p: p.id, stat: statOf(step.target), d: step.op === "+" ? v : -v });
+      for (const p of hit) ctx.tableOps.push({ p: p.id, stat: statOf(step.target), d });
       continue;
     }
     if (!has(step.target) || (!literal && !has(step.value))) {
@@ -662,12 +678,8 @@ export function recordingSteps(s, direct, toggled = {}, start = {}, table = {}) 
     if (t.id in toggled && toggled[t.id] !== start[t.id]) steps.push({ target: { kind: "toggle", toggleId: t.id }, op: "=", value: toggled[t.id] });
   }
   // Table Life / Table Counter tiles used while recording. table: {key: net change}, key
-  // "<stat>|<who>", e.g. "life|me", "life|opponentRandom", "poison|name:Dave" (no "<stat>|" means life).
-  for (const [key, d] of Object.entries(table)) {
-    if (!d) continue;
-    const ref = keyTableRef(key);
-    steps.push({ target: ref, op: d > 0 ? "+" : "-", value: Math.abs(d) });
-  }
+  // "<stat>|<who>", e.g. "life|me", "life|opponentRandom~pp", "poison|name:Dave" (see keyTableStep).
+  for (const [key, d] of Object.entries(table)) if (d) steps.push(keyTableStep(key, d));
   return steps;
 }
 

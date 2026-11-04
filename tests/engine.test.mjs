@@ -539,3 +539,16 @@ test("a quick (counters-only) table skips #life steps but runs counter steps", (
   assert.equal(r.tableSkipped, 1);
   assert.deepEqual(r.tableOps, [{ p: "d", stat: "Poison", d: 1 }]);
 });
+
+test("random per point rolls every point; total gives it all to one pick", () => {
+  const d = E.createDash({ name: "t", count: 1, grid: { cols: 2, rows: 2 } });
+  const rolls = [0, 0.99, 0, 0.99, 0.99];
+  let i = 0;
+  const tb = () => ({ ...table(), rand: () => rolls[i++ % rolls.length] });
+  const per = E.runMacro(E.view(d), { vars: [], steps: [E.keyTableStep("life|opponentRandom~pp", -5)] }, 1, tb());
+  assert.deepEqual(per.tableOps, [{ p: "d", d: -2 }, { p: "a", d: -3 }]);
+  i = 0;
+  const tot = E.runMacro(E.view(d), { vars: [], steps: [E.keyTableStep("life|opponentRandom", -5)] }, 1, tb());
+  assert.deepEqual(tot.tableOps, [{ p: "d", d: -5 }]);
+  assert.equal(E.recordingSteps(E.view(d), {}, {}, {}, { "Poison|playerRandom~pp": 2 })[0].perPoint, true);
+});

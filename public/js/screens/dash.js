@@ -622,7 +622,7 @@ export function DashScreen({ id, nav, autoTurn }) {
   const dealDamage = (alloc) => {
     const ctx = tableContext();
     if (!ctx) return;
-    const steps = alloc.map(({ key, d }) => ({ target: E.keyTableRef(key), op: d > 0 ? "+" : "-", value: Math.abs(d) }));
+    const steps = alloc.map(({ key, d }) => E.keyTableStep(key, d));
     const r = E.runMacro(E.view(store.get(id)), { vars: [], steps }, 1, ctx);
     if (ctx && r.tableOps.length) {
       sendLife(ctx.id, r.tableOps);

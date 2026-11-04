@@ -125,6 +125,7 @@ What actually shipped, where it differs from the design below:
 - **Target:** `#life#<who>`, with + and − only. Who is one of: `#opponents`, `#opponentRandom`, `#playerRandom`, `#me`, `#all`, or `#<playerName>`.
   - Only living players count, except a named player, who is hit even if dead.
   - Random targets are re-rolled each time the step runs, so ×30 means 30 rolls.
+  - A random step can also be **per point** (`perPoint: true`): every point of its value is rolled separately. **Total** (the default for steps) sends the whole value to one pick. The tile pane has a Per point / Total toggle under the random rows (remembered per device), and recordings keep it.
 - **One action, one table event:** a tap, macro or toggle (repeats and triggers included) nets its life changes per player and sends them to the table as one action. The dash event keeps those ops, so **dash undo sends the reverse** as a new table action instead of using the table's undo (which might belong to someone else). Redo sends them again.
 - **No table:** table steps are skipped with a note, and the rest of the macro runs. A missing named player is reported.
 - **Damage tile:**

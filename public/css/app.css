@@ -1048,3 +1048,12 @@ h1, h2, p { margin: 0; }
 .dmg-now { color: var(--muted); font-weight: 500; font-size: 12px; margin-left: 4px; font-variant-numeric: tabular-nums; }
 .tcn-none { flex: 1; display: grid; place-content: center; gap: 2px; text-align: center; color: var(--muted); font-size: min(15px, 12cqh); font-weight: 560; }
 .tcn-none small { font-size: min(12px, 10cqh); font-weight: 450; color: #6b707a; }
+
+/* table life / counter pane: per point vs total, and the break before the seats */
+.dmg-pp { margin-top: 10px; }
+.dmg-pp .hint { margin: 6px 2px 0; }
+.dmg-break { height: 1px; background: var(--line-2); margin: 14px -4px 4px; border-radius: 1px; }
+.pp-chip { flex: none; width: 40px; height: 34px; padding: 0; border-radius: 10px; font-size: 12px; font-weight: 650; color: var(--muted); border: 1.5px dashed var(--line-2); }
+.pp-chip.on { color: var(--teal); border: 1.5px solid var(--teal); background: rgba(63, 183, 189, .12); }
+.step-grid.has-pp { grid-template-columns: 22px minmax(0, 1fr) 46px minmax(0, .8fr) 40px 32px; gap: 4px; }
+.step-grid.has-pp .step-del { width: 32px; }

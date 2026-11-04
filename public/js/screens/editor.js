@@ -332,7 +332,7 @@ export function MacroEditor({ id, macroId, tileId, triggerId, nav }) {
             const dragging = drag && drag.i === i;
             return html`
               <li key=${st._k} class=${"step-row" + (dragging ? " dragging" : "") + (broken ? " is-broken" : "")} style=${dragging ? { transform: `translateY(${drag.dy}px)` } : null}>
-                <div class="step-grid">
+                <div class=${"step-grid" + (st.target.kind === "table" && E.RANDOM_WHO.has(st.target.who) ? " has-pp" : "")}>
                   <button class="step-num" aria-label=${`Step ${i + 1}. Drag to reorder`}
                     onPointerDown=${(e) => onDragStart(e, i)} onPointerMove=${onDragMove} onPointerUp=${onDragEnd} onPointerCancel=${onDragEnd}
                     onKeyDown=${(e) => {
@@ -348,6 +348,10 @@ export function MacroEditor({ id, macroId, tileId, triggerId, nav }) {
                     onChange=${(target) => setStep(i, target.kind === "table" && st.op !== "+" && st.op !== "-" ? { target, op: "-" } : { target })} />
                   <${OpSelect} op=${st.op} lifeOnly=${st.target.kind === "table"} onChange=${(op) => setStep(i, { op })} />
                   <${ValueBox} s=${s} macro=${m} step=${st} onChange=${(value) => setStep(i, { value })} />
+                  ${st.target.kind === "table" && E.RANDOM_WHO.has(st.target.who) && html`
+                    <button class=${"pp-chip" + (st.perPoint ? " on" : "")} aria-pressed=${!!st.perPoint}
+                      aria-label=${st.perPoint ? "Per point: each point rolled separately. Tap for total." : "Total: all to one random pick. Tap for per point."}
+                      onClick=${() => setStep(i, { perPoint: !st.perPoint })}>${st.perPoint ? "each" : "all"}</button>`}
                   <button class="step-del" aria-label=${`Delete step ${i + 1}`} onClick=${() => delStep(i)}><${Icon} name="x" size=${20} /></button>
                 </div>
               </li>`;

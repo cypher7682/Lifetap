@@ -2,13 +2,14 @@ import { html, useState } from "../../vendor/preact-htm.js";
 import * as tables from "../tablestore.js";
 import * as T from "../table.js";
 import { Icon } from "../icons.js";
-import { usePress, Sheet, IntInput } from "../ui.js";
+import { usePress, Sheet, IntInput, Segmented } from "../ui.js";
 
 // The dash's Table Life and Table Counter tiles: change life (or a player counter like poison)
 // at the live table without leaving your counters. Amounts are changes (−2 = lose two, +1 = gain one).
 // Done hands them to the dash, which runs them as #<stat> steps, so random picks and recording
 // work exactly like macros.
 
+const PP_KEY = "lifetap:random-split";
 const signed = (n) => (n > 0 ? "+" + n : n < 0 ? "−" + Math.abs(n) : "0");
 const tone = (n) => (n < 0 ? " neg" : n > 0 ? " pos" : "");
 
@@ -99,6 +100,7 @@ function RandomRow({ label, n, onStep }) {
 export function DamageSheet({ turn = 0, stat = "life", onClose, onDone }) {
   const t = tables.current();
   const [amt, setAmt] = useState({});
+  const [perPoint, setPerPoint] = useState(() => localStorage.getItem(PP_KEY) !== "total");
   const isLife = stat === "life";
   if (!t) return null;
   const seats = T.state(t).seats;
@@ -107,13 +109,21 @@ export function DamageSheet({ turn = 0, stat = "life", onClose, onDone }) {
   const keyOf = (p) => pre + (p.id === t.me ? "me" : "name:" + p.name);
   const now = (p) => (isLife ? p.life : T.counterOf(p, stat));
   const step = (key, d) => setAmt((a) => ({ ...a, [key]: (a[key] || 0) + d }));
-  const alloc = Object.entries(amt).filter(([, d]) => d).map(([key, d]) => ({ key, d }));
+  const isRand = (key) => key.endsWith("|opponentRandom") || key.endsWith("|playerRandom");
+  const alloc = Object.entries(amt).filter(([, d]) => d).map(([key, d]) => ({ key: isRand(key) && perPoint ? key + "~pp" : key, d }));
+  const pick = (v) => { localStorage.setItem(PP_KEY, v ? "per" : "total"); setPerPoint(v); };
   const hurts = alloc.some((a) => a.d < 0);
   return html`
     <${Sheet} onClose=${onClose} turn=${turn} label=${isLife ? "Table life" : stat} class="dmg-sheet">
       <h2 class="sheet-title">${isLife ? "Table life" : stat} <span class="muted small">Table <span class="tbl-code">#${t.code}</span></span></h2>
       <${RandomRow} label="Random opponent" n=${amt[pre + "opponentRandom"] || 0} onStep=${(d) => step(pre + "opponentRandom", d)} />
       <${RandomRow} label="Random player" n=${amt[pre + "playerRandom"] || 0} onStep=${(d) => step(pre + "playerRandom", d)} />
+      <div class="dmg-pp">
+        <${Segmented} label="How random amounts are shared" value=${perPoint} onChange=${pick}
+          options=${[{ value: true, label: "Per point" }, { value: false, label: "Total" }]} />
+        <p class="hint small">${perPoint ? "Each point goes to its own random pick." : "The whole amount goes to one random pick."}</p>
+      </div>
+      <div class="dmg-break" role="separator"></div>
       <div class="dmg-grid" style=${{ gridTemplateRows: `repeat(${grid.rows}, auto)` }}>
         ${seats.map((p, i) => html`<${DmgCard} key=${p.id} p=${p} n=${amt[keyOf(p)] || 0} now=${now(p)} floor=${isLife ? -Infinity : 0} self=${p.id === t.me} cell=${grid.cells[i]} onStep=${(d) => step(keyOf(p), d)} />`)}
       </div>
