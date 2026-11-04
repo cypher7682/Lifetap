@@ -42,28 +42,24 @@ function DmgCard({ p, n, self, cell, onStep }) {
     </div>`;
 }
 
-/** "Damage allocation": the table's seats, how much each takes, commander or not; Done sends it. */
+/** "Damage allocation": the table's seats and how much each takes; Done sends it as life loss. (Commander damage is combat, so it lives on the table view.) */
 export function DamageSheet({ turn = 0, onClose }) {
   const t = tables.current();
   const [amt, setAmt] = useState({});
-  const [cmdr, setCmdr] = useState(false);
-  const [part, setPart] = useState(0);
   if (!t) return null;
   const s = T.state(t);
-  const me = s.byId[t.me];
   const grid = T.seatGrid(s.seats.length);
   const step = (pid, d) => setAmt((a) => ({ ...a, [pid]: Math.max(0, (a[pid] || 0) + d) }));
   const total = Object.values(amt).reduce((x, y) => x + y, 0);
-  const asCmdr = cmdr && !!me;
 
   const done = () => {
     const ops = s.seats
       .filter((p) => amt[p.id] > 0)
-      .map((p) => (asCmdr ? { op: "cmdr", to: p.id, from: me.id, part: me.partners ? part : 0, d: amt[p.id] } : { op: "life", p: p.id, d: -amt[p.id] }));
+      .map((p) => ({ op: "life", p: p.id, d: -amt[p.id] }));
     if (ops.length) {
       if (t.online) sync.act(t.id, { ops });
       else tables.update(t.id, (x) => T.act(x, ops, tables.deviceId));
-      toast(s.seats.filter((p) => amt[p.id] > 0).map((p) => `${p.name} ${signedDmg(amt[p.id])}`).join(", ") + (asCmdr ? " (commander)" : ""));
+      toast(s.seats.filter((p) => amt[p.id] > 0).map((p) => `${p.name} ${signedDmg(amt[p.id])}`).join(", "));
     }
     onClose();
   };
@@ -74,14 +70,6 @@ export function DamageSheet({ turn = 0, onClose }) {
       <div class="dmg-grid" style=${{ gridTemplateRows: `repeat(${grid.rows}, auto)` }}>
         ${s.seats.map((p, i) => html`<${DmgCard} key=${p.id} p=${p} n=${amt[p.id] || 0} self=${p.id === t.me} cell=${grid.cells[i]} onStep=${(d) => step(p.id, d)} />`)}
       </div>
-      <label class=${"switch-row dmg-cmdr" + (me ? "" : " off")}>
-        <span>Commander damage${me ? "" : " (you're not seated)"}</span>
-        ${asCmdr && me.partners && html`
-          <span class="seg dmg-part" role="radiogroup" aria-label="Which commander">
-            ${[0, 1].map((k) => html`<button role="radio" aria-checked=${part === k} class=${part === k ? "on" : ""} onClick=${(e) => { e.preventDefault(); setPart(k); }}>${k ? "II" : "I"}</button>`)}
-          </span>`}
-        <input type="checkbox" class="switch" checked=${asCmdr} disabled=${!me} onChange=${() => setCmdr(!cmdr)} />
-      </label>
       <div class="sheet-row dmg-actions">
         <button class="btn btn-plain" onClick=${onClose}>Cancel</button>
         <button class=${"btn " + (total ? "btn-take" : "btn-primary")} disabled=${!total} onClick=${done}>Done${total ? ` · ${total}` : ""}</button>

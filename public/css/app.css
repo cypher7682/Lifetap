@@ -1004,9 +1004,6 @@ h1, h2, p { margin: 0; }
 .dmg-card.on .dmg-val { color: var(--red-text); }
 .dmg-tens { display: flex; gap: 8px; width: 100%; justify-content: center; }
 .dmg-ten { flex: 1; max-width: 72px; height: 34px; border-radius: 11px; background: var(--surface-2); color: var(--muted); font-size: 14px; font-weight: 600; }
-.dmg-cmdr { margin-top: 6px; color: var(--text); }
-.dmg-cmdr.off { color: var(--muted); }
-.dmg-part { margin-left: auto; margin-right: 12px; }
 .dmg-actions { margin-top: 12px; }
 .choice-dmg .ic { color: var(--red-text); }
 
