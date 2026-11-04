@@ -7,7 +7,7 @@ import { IconPicker, ColorPicker, GridSizer } from "./pickers.js";
 import { VarSheet } from "./editor.js";
 import * as tables from "../tablestore.js";
 import { ViewSwitch } from "../viewswitch.js";
-import { DamageTile, DamageSheet } from "./damage.js";
+import { DamageTile, DamageSheet, TableCounterTile } from "./damage.js";
 import { tableContext, sendLife, describeLife } from "../tablelink.js";
 
 // Edit mode survives a trip to the step editor and back.
@@ -443,6 +443,29 @@ function VarsBoxSheet({ dash, index, onClose, onRemove, onNewVar }) {
     <//>`;
 }
 
+/** Edit a Table Counter tile: just its name (the counter it changes on each player). */
+function TableCounterCellSheet({ dash, index, onClose, onRemove }) {
+  const cell = E.view(dash).cells[index];
+  const [name, setName] = useState(cell ? cell.name : "");
+  if (!cell || cell.kind !== "tcounter") return null;
+  const clean = name.trim().replace(/[#|]/g, "");
+  const save = () => {
+    if (clean && clean !== cell.name) store.update(dash.id, (d) => E.editDraft(d, (s) => E.updateCell(s, index, { name: clean })));
+    onClose();
+  };
+  return html`
+    <${Sheet} onClose=${save} label="Table counter">
+      <h2 class="sheet-title">Table counter</h2>
+      <label class="field-label" for="tcn">Name</label>
+      <input id="tcn" class=${"input" + (clean ? "" : " invalid")} value=${name} maxlength="20" placeholder="e.g. Poison" onInput=${(e) => setName(e.currentTarget.value)} onKeyDown=${(e) => e.key === "Enter" && save()} />
+      <p class="hint">A counter every player at the table has, e.g. poison, rad or experience. Everyone sees it on the table. In macros it's #${clean || "name"}#opponents, #${clean || "name"}#me and so on.</p>
+      <div class="sheet-row">
+        <button class="btn btn-danger-soft" onClick=${onRemove}><${Icon} name="trash" size=${20} /> Remove</button>
+        <button class="btn btn-primary" disabled=${!clean} onClick=${save}>Done</button>
+      </div>
+    <//>`;
+}
+
 function GridSheet({ dash, onClose }) {
   const v = E.view(dash);
   const used = v.cells.filter(Boolean).length;
@@ -591,13 +614,14 @@ export function DashScreen({ id, nav, autoTurn }) {
     else if (!r.changes.length && !r.tableOps.length && !r.skippedBroken && !r.divByZero && !r.tableSkipped && !(r.missing || []).length) toast(m.steps.length ? `${m.name}: nothing changed` : `${m.name} has no steps yet`);
   };
 
-  /** Damage tile: [{key, d}] with key "me" / "opponentRandom" / "playerRandom" / "name:Dave", d = life change. */
+  /**
+   * Table Life / Table Counter tiles: [{key, d}], key "<stat>|<who>" ("life|me", "poison|name:Dave"…), d = change.
+   * Runs them as #table steps, so random picks and recording work the same as macros.
+   */
   const dealDamage = (alloc) => {
     const ctx = tableContext();
     if (!ctx) return toast("Start or join a table first");
-    const steps = alloc.map(({ key, d }) => ({
-      target: key.startsWith("name:") ? E.tableRef("name", key.slice(5)) : E.tableRef(key), op: d > 0 ? "+" : "-", value: Math.abs(d),
-    }));
+    const steps = alloc.map(({ key, d }) => ({ target: E.keyTableRef(key), op: d > 0 ? "+" : "-", value: Math.abs(d) }));
     const r = E.runMacro(E.view(store.get(id)), { vars: [], steps }, 1, ctx);
     if (r.tableOps.length) {
       sendLife(ctx.id, r.tableOps);
@@ -612,6 +636,16 @@ export function DashScreen({ id, nav, autoTurn }) {
     }
   };
 
+  /** Table counter tile away from a table: your own count, through the engine like any tap. */
+  const localCounter = (cell, d) => {
+    const r = E.runMacro(E.view(store.get(id)), { vars: [], steps: [{ target: E.tableRef("me", undefined, cell.name), op: d > 0 ? "+" : "-", value: Math.abs(d) }] }, 1, null);
+    commit(E.makeEvent("tap", `${cell.name} ${d > 0 ? "+" : "−"}${Math.abs(d)}`, r.changes));
+    if (recRef.current) {
+      const key = cell.name + "|me";
+      setRec((rr) => ({ ...rr, table: { ...rr.table, [key]: (rr.table[key] || 0) + d } }));
+    }
+  };
+
   const tapMacro = (macroId) => {
     const m = E.findMacro(v, macroId);
     if (!m) return;
@@ -623,7 +657,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     const ev = dash.log[dash.log.length - 1];
     if (!ev) return;
     store.update(id, E.undo);
-    if (ev.table) sendLife(ev.table.id, ev.table.ops.map((o) => ({ p: o.p, d: -o.d })));
+    if (ev.table) sendLife(ev.table.id, ev.table.ops.map((o) => ({ ...o, d: -o.d })));
     toast(`Undid ${ev.label}`);
   };
   const doRedo = () => {
@@ -705,7 +739,7 @@ export function DashScreen({ id, nav, autoTurn }) {
 
   const removeCell = (index) => {
     const c = v.cells[index];
-    const name = !c ? "" : c.kind === "counter" ? c.name : c.kind === "macro" ? E.cellMacroIds(c).map((mid) => E.findMacro(v, mid)?.name).filter(Boolean).join(", ") || "macro" : c.kind === "toggles" ? "toggle box" : c.kind === "damage" ? "damage tile" : "vars box";
+    const name = !c ? "" : c.kind === "counter" ? c.name : c.kind === "macro" ? E.cellMacroIds(c).map((mid) => E.findMacro(v, mid)?.name).filter(Boolean).join(", ") || "macro" : c.kind === "toggles" ? "toggle box" : c.kind === "damage" ? "Table Life tile" : c.kind === "tcounter" ? c.name : "vars box";
     setSheet(null);
     setSelected(null);
     editWithUndo(`Removed “${name}”`, (s) => E.removeCell(s, index));
@@ -748,6 +782,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     const box = kind === "toggles"
       ? E.newToggleBox([`Toggle ${E.toggles(s0).length + 1}`])
       : kind === "damage" ? E.newDamageBox()
+      : kind === "tcounter" ? E.newTableCounterBox()
       : E.newVarsBox(E.dashVars(s0).map((x) => x.id));
     store.update(id, (d) => E.editDraft(d, (s) => {
       const cells = s.cells.slice();
@@ -755,7 +790,7 @@ export function DashScreen({ id, nav, autoTurn }) {
       return { ...s, cells };
     }));
     setSelected(index);
-    setSheet({ type: kind === "toggles" ? "togglecell" : "varscell", index });
+    setSheet({ type: { toggles: "togglecell", vars: "varscell", damage: "damagecell", tcounter: "tcountercell" }[kind], index });
   };
 
   const addMacroToTile = (index) => {
@@ -818,6 +853,10 @@ export function DashScreen({ id, nav, autoTurn }) {
       return html`<${DamageTile} key=${cell.id} turn=${turn}
         onOpen=${() => (tables.current() ? setSheet({ type: "damage" }) : toast("Start or join a table first (home screen)"))} />`;
     }
+    if (cell.kind === "tcounter") {
+      return html`<${TableCounterTile} key=${cell.id} cell=${cell} turn=${turn}
+        onOpen=${() => setSheet({ type: "damage", stat: cell.name })} onStep=${(d) => localCounter(cell, d)} />`;
+    }
     const ms = E.cellMacroIds(cell).map((mid) => E.findMacro(v, mid)).filter(Boolean);
     if (!ms.length) return html`<div class="cell-empty" key=${"e" + i}></div>`;
     const isRec = recTargetIsCell(cell);
@@ -836,13 +875,14 @@ export function DashScreen({ id, nav, autoTurn }) {
       return html`<button key=${"e" + i} ...${b} class=${"tile edit-tile edit-empty" + b.class} aria-label="Empty cell. Add a counter, macro, toggles or vars box.">
         <${Icon} name="plus" size=${28} /></button>`;
     }
-    if (cell.kind === "damage") {
-      const bind = slotDrag.bind({ zone: "cell", index: i }, () => { setSelected(i); setSheet({ type: "damagecell", index: i }); });
+    if (cell.kind === "damage" || cell.kind === "tcounter") {
+      const isC = cell.kind === "tcounter";
+      const bind = slotDrag.bind({ zone: "cell", index: i }, () => { setSelected(i); setSheet({ type: isC ? "tcountercell" : "damagecell", index: i }); });
       return html`
-        <button key=${cell.id} ...${bind} class=${"tile edit-tile" + (selected === i ? " picked" : "") + bind.class} aria-label="Edit damage tile. Hold and drag to move.">
-          <span class="c-red"><${Icon} name="lightning" size=${24} /></span>
-          <span class="edit-name">Damage</span>
-          <span class="edit-kind c-red">table</span>
+        <button key=${cell.id} ...${bind} class=${"tile edit-tile" + (selected === i ? " picked" : "") + bind.class} aria-label=${`Edit ${isC ? "table counter " + cell.name : "table life tile"}. Hold and drag to move.`}>
+          <span class=${isC ? "c-purple" : "c-red"}><${Icon} name=${isC ? "table" : "heart"} size=${24} /></span>
+          <span class="edit-name">${isC ? cell.name : "Table Life"}</span>
+          <span class=${"edit-kind " + (isC ? "c-purple" : "c-red")}>${isC ? "table counter" : "table"}</span>
         </button>`;
     }
     if (cell.kind === "toggles" || cell.kind === "vars") {
@@ -985,7 +1025,8 @@ export function DashScreen({ id, nav, autoTurn }) {
             <button class="choice choice-macro" onClick=${() => addMacroCell(sheet.index)}><${Icon} name="play" size=${30} /><b>Macro</b><span>A big ▶ button that runs steps</span></button>
             <button class="choice" onClick=${() => addBox(sheet.index, "toggles")}><${Icon} name="toggle" size=${30} /><b>Toggles</b><span>One or two on/off switches</span></button>
             <button class="choice choice-vars" onClick=${() => addBox(sheet.index, "vars")}><${Icon} name="vars" size=${30} /><b>Vars box</b><span>Shows up to 4 @variables</span></button>
-            <button class="choice choice-dmg" onClick=${() => addBox(sheet.index, "damage")}><${Icon} name="lightning" size=${30} /><b>Damage</b><span>Hand out damage at the table</span></button>
+            <button class="choice choice-dmg" onClick=${() => addBox(sheet.index, "damage")}><${Icon} name="heart" size=${30} /><b>Table Life</b><span>Change life totals at your table</span></button>
+            <button class="choice choice-tcounter" onClick=${() => addBox(sheet.index, "tcounter")}><${Icon} name="table" size=${30} /><b>Table counter</b><span>A counter on each player, e.g. poison</span></button>
           </div>
         <//>`;
     } else if (sheet.type === "macrobox") {
@@ -1022,12 +1063,14 @@ export function DashScreen({ id, nav, autoTurn }) {
         }}
         onDeleteTrigger=${(toggleId, triggerId) => editWithUndo("Deleted trigger", (st) => setToggleTriggers(st, toggleId, (trs) => trs.filter((x) => x.id !== triggerId)))} />`;
     } else if (sheet.type === "damage") {
-      sheetEl = html`<${DamageSheet} turn=${turn} onClose=${close} onDone=${(alloc) => { close(); dealDamage(alloc); }} />`;
+      sheetEl = html`<${DamageSheet} turn=${turn} stat=${sheet.stat || "life"} onClose=${close} onDone=${(alloc) => { close(); dealDamage(alloc); }} />`;
+    } else if (sheet.type === "tcountercell") {
+      sheetEl = html`<${TableCounterCellSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)} />`;
     } else if (sheet.type === "damagecell") {
       sheetEl = html`
-        <${Sheet} onClose=${close} label="Damage tile">
-          <h2 class="sheet-title">Damage tile</h2>
-          <p class="hint">Tap it while you're playing to hand out damage at your table, as life loss or commander damage. It needs a table: start or join one from the home screen.</p>
+        <${Sheet} onClose=${close} label="Table Life tile">
+          <h2 class="sheet-title">Table Life</h2>
+          <p class="hint">Tap it while you're playing to change life at your table: − to lose, + to gain. Use it while recording and it becomes #life steps in the macro. It needs a table: start or join one from the home screen.</p>
           <div class="sheet-row">
             <button class="btn btn-danger-soft" onClick=${() => removeCell(sheet.index)}><${Icon} name="trash" size=${20} /> Remove</button>
             <button class="btn btn-primary" onClick=${close}>Done</button>

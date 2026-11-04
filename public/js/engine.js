@@ -97,8 +97,12 @@ export function holderValues(s) {
   for (const t of counters(s)) m.set(t.id, t.value);
   for (const t of toggles(s)) m.set(t.id, t.value ? 1 : 0);
   for (const v of dashVars(s)) m.set(v.id, v.value);
+  for (const c of tableCounterCells(s)) m.set(c.id, c.value || 0);
   return m;
 }
+
+/** Table Counter tiles. Each keeps your own count for when you're not at a table. */
+export const tableCounterCells = (s) => s.cells.filter((c) => c && c.kind === "tcounter");
 
 /** The id of the persistent value a ref points at, or null for a per-run $var. */
 export function holderId(ref) {
@@ -144,6 +148,18 @@ export function newVarsBox(show = []) {
 }
 
 /** Damage tile: opens the table's damage allocation. No state of its own. */
+export function keyTableRef(key) {
+  const bar = key.indexOf("|");
+  const stat = bar >= 0 ? key.slice(0, bar) : "life";
+  const who = bar >= 0 ? key.slice(bar + 1) : key;
+  return who.startsWith("name:") ? tableRef("name", who.slice(5), stat) : tableRef(who, undefined, stat);
+}
+
+/** Table Counter tile: a named player counter at the table (poison, rad…). */
+export function newTableCounterBox(name = "Poison") {
+  return { kind: "tcounter", id: uid(), name, value: 0 };
+}
+
 export function newDamageBox() {
   return { kind: "damage", id: uid() };
 }
@@ -207,7 +223,7 @@ export function duplicateDash(dash, name) {
       return { ...c, id: uid(), toggles: c.toggles.map((t) => ({ ...t, id: re(t.id), ...(t.triggers ? { triggers: t.triggers.map(copyTrigger) } : {}) })) };
     }
     if (c.kind === "vars") return { ...c, id: uid(), show: c.show.map(re) };
-    if (c.kind === "damage") return { ...c, id: uid() };
+    if (c.kind === "damage" || c.kind === "tcounter") return { ...c, id: uid() };
     return macroCell(cellMacroIds(c).map((m) => macroMap.get(m)));
   });
   const macros = src.macros.map((m) => ({
@@ -381,10 +397,12 @@ export function nextMacroName(s) {
 
 // ---------------------------------------------------------------- refs & steps
 
-// Table steps: `#life#<who>` changes a player's life at the table you're at.
-// Who is picked each time the step runs, so a random target is re-rolled on every repeat.
+// Table steps: `#life#<who>` changes a player's life at the table you're at; `#poison#<who>`
+// (any other name) changes that player counter. Who is picked each time the step runs,
+// so a random target is re-rolled on every repeat.
 export const TABLE_WHO = ["opponents", "opponentRandom", "playerRandom", "me", "all"];
-export const tableRef = (who, name) => (who === "name" ? { kind: "table", stat: "life", who, name } : { kind: "table", stat: "life", who });
+export const tableRef = (who, name, stat = "life") => (who === "name" ? { kind: "table", stat, who, name } : { kind: "table", stat, who });
+const statOf = (ref) => (!ref.stat || ref.stat.toLowerCase() === "life" ? "life" : ref.stat);
 
 /**
  * Which seats a table ref hits right now. table: {me, seats: [{id, name, dead}], rand}.
@@ -425,7 +443,7 @@ export function stepBroken(s, macro, step) {
 export function refLabel(s, ref) {
   if (!ref) return "?";
   if (ref.kind === "var") return "$" + ref.name;
-  if (ref.kind === "table") return "#life#" + (ref.who === "name" ? ref.name : ref.who);
+  if (ref.kind === "table") return "#" + statOf(ref) + "#" + (ref.who === "name" ? ref.name : ref.who);
   if (ref.kind === "dvar") {
     const v = findDashVar(s, ref.varId);
     return v ? "@" + v.name : "Var removed";
@@ -486,6 +504,8 @@ class TriggerLoop {}
 export function runMacro(s, macro, times = 1, table = null) {
   const ctx = {
     table,
+    // away from a table, #<counter>#me (and #all / #playerRandom, which can only mean you) changes the tile's own count
+    localCounters: new Map(tableCounterCells(s).map((c) => [String(c.name).toLowerCase(), c.id])),
     tableOps: [],
     tableSkipped: 0,
     missing: new Set(),
@@ -515,10 +535,14 @@ export function runMacro(s, macro, times = 1, table = null) {
     const to = ctx.values.get(id);
     if (to !== from) changes.push({ tileId: id, from, to });
   }
-  // net life change per player, in the order they were first hit
+  // net change per player and stat (life or a counter), in the order first hit
   const net = new Map();
-  for (const o of ctx.tableOps) net.set(o.p, (net.get(o.p) || 0) + o.d);
-  const tableOps = [...net].filter(([, d]) => d).map(([p, d]) => ({ p, d }));
+  for (const o of ctx.tableOps) {
+    const k = o.p + "\u0000" + o.stat.toLowerCase();
+    const cur = net.get(k) || { p: o.p, stat: o.stat, d: 0 };
+    net.set(k, { ...cur, d: cur.d + o.d });
+  }
+  const tableOps = [...net.values()].filter((o) => o.d).map((o) => (o.stat === "life" ? { p: o.p, d: o.d } : o));
   return result({ changes, tableOps });
 }
 
@@ -533,12 +557,17 @@ function execSteps(ctx, macro, change) {
     const literal = typeof step.value === "number";
     if (step.target && step.target.kind === "table") {
       if (!literal && !has(step.value)) { ctx.broken.add(step); continue; }
-      if (!ctx.table) { ctx.tableSkipped++; continue; }
       if (step.op !== "+" && step.op !== "-") { ctx.broken.add(step); continue; }
       const v = literal ? toInt(step.value) : read(step.value);
+      if (!ctx.table) {
+        const local = statOf(step.target) !== "life" && ["me", "all", "playerRandom"].includes(step.target.who) && ctx.localCounters.get(statOf(step.target).toLowerCase());
+        if (!local) { ctx.tableSkipped++; continue; }
+        ctx.values.set(local, Math.max(0, ctx.values.get(local) + (step.op === "+" ? v : -v)));
+        continue;
+      }
       const hit = tableTargets(ctx.table, step.target);
       if (!hit.length && step.target.who === "name") ctx.missing.add(step.target.name);
-      for (const p of hit) ctx.tableOps.push({ p: p.id, d: step.op === "+" ? v : -v });
+      for (const p of hit) ctx.tableOps.push({ p: p.id, stat: statOf(step.target), d: step.op === "+" ? v : -v });
       continue;
     }
     if (!has(step.target) || (!literal && !has(step.value))) {
@@ -642,10 +671,11 @@ export function recordingSteps(s, direct, toggled = {}, start = {}, table = {}) 
   for (const t of toggles(s)) {
     if (t.id in toggled && toggled[t.id] !== start[t.id]) steps.push({ target: { kind: "toggle", toggleId: t.id }, op: "=", value: toggled[t.id] });
   }
-  // Damage tile use while recording. table: {key: net life change}, key "me" / "opponentRandom" / "name:Dave" …
+  // Table Life / Table Counter tiles used while recording. table: {key: net change}, key
+  // "<stat>|<who>", e.g. "life|me", "life|opponentRandom", "poison|name:Dave" (no "<stat>|" means life).
   for (const [key, d] of Object.entries(table)) {
     if (!d) continue;
-    const ref = key.startsWith("name:") ? tableRef("name", key.slice(5)) : tableRef(key);
+    const ref = keyTableRef(key);
     steps.push({ target: ref, op: d > 0 ? "+" : "-", value: Math.abs(d) });
   }
   return steps;
@@ -657,6 +687,10 @@ function setValues(cells, map) {
   let changed = false;
   const out = cells.map((c) => {
     if (c && c.kind === "counter" && map.has(c.id) && c.value !== map.get(c.id)) {
+      changed = true;
+      return { ...c, value: map.get(c.id) };
+    }
+    if (c && c.kind === "tcounter" && map.has(c.id) && (c.value || 0) !== map.get(c.id)) {
       changed = true;
       return { ...c, value: map.get(c.id) };
     }
@@ -742,6 +776,7 @@ export function resetDash(dash) {
     for (const t of counters(s)) map.set(t.id, t.start);
     for (const t of toggles(s)) map.set(t.id, 0);
     for (const v of dashVars(s)) map.set(v.id, v.initial);
+    for (const c of tableCounterCells(s)) map.set(c.id, 0);
   }
   return { ...withValues(dash, map), log: [], redo: [] };
 }

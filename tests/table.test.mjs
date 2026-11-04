@@ -164,3 +164,18 @@ test("swapping seats is an event everyone replays; undo swaps back", () => {
   t = T.undo(t, "A", 6);
   assert.deepEqual(ids(t), [a, b, c]);
 });
+
+test("player counters: case-insensitive, never below 0, bundle, cleared on reset", () => {
+  let t = mk();
+  const [a, b] = ids(t);
+  t = T.act(t, [{ op: "counter", p: b, name: "Poison", d: 2 }], "A", 1);
+  t = T.act(t, [{ op: "counter", p: b, name: "poison", d: 1 }], "A", 2);
+  assert.equal(t.events.length, 2, "bundled");
+  assert.equal(T.counterOf(T.state(t).byId[b], "POISON"), 3);
+  assert.deepEqual(T.counterNames(T.state(t)), [{ key: "poison", name: "Poison" }]);
+  t = T.act(t, [{ op: "counter", p: a, name: "Rad", d: -2 }], "B", 3);
+  assert.equal(T.counterOf(T.state(t).byId[a], "rad"), 0);
+  assert.equal(T.describe(t, t.events[1]), "Uyop Poison +3");
+  t = T.act(t, T.resetOps(t), "A", 9);
+  assert.deepEqual(T.state(t).byId[b].counters, {});
+});

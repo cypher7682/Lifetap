@@ -111,11 +111,11 @@ function applyOp(s, o) {
         P[o.p.id].removed = false;
         return;
       }
-      P[o.p.id] = { ...o.p, life: s.startLife, cmdr: {}, partners: false, dead: false, removed: false };
+      P[o.p.id] = { ...o.p, life: s.startLife, cmdr: {}, counters: {}, partners: false, dead: false, removed: false };
       s.order.push(o.p.id);
       return;
     case "reset":
-      for (const id of s.order) Object.assign(P[id], { life: s.startLife, cmdr: {}, dead: false });
+      for (const id of s.order) Object.assign(P[id], { life: s.startLife, cmdr: {}, counters: {}, dead: false });
       s.monarch = null;
       s.first = null;
       return;
@@ -149,6 +149,19 @@ function applyOp(s, o) {
     case "life":
       p.life += o.d;
       return;
+    case "counter": {
+      // player counters (poison, rad…): keyed case-insensitively, shown as first typed, never below 0
+      const key = counterKey(o.name);
+      if (!key) return;
+      const cur = p.counters[key] || { name: String(o.name).trim(), value: 0 };
+      const value = Math.max(0, cur.value + o.d);
+      if (value) p.counters = { ...p.counters, [key]: { name: cur.name, value } };
+      else {
+        const { [key]: _, ...rest } = p.counters;
+        p.counters = rest;
+      }
+      return;
+    }
     case "cmdr": {
       if (!P[o.from]) return;
       const pair = (p.cmdr[o.from] ||= [0, 0]);
@@ -174,8 +187,20 @@ export function cmdrOf(s, to, from) {
 
 // ---------------------------------------------------------------- writing
 
-const BUNDLED = new Set(["life", "cmdr"]);
-const opKey = (o) => (o.op === "life" ? "l:" + o.p : `c:${o.to}:${o.from}:${o.part}`);
+export const counterKey = (name) => String(name || "").trim().toLowerCase();
+
+/** Every player counter in use at the table: [{key, name}]. */
+export function counterNames(s) {
+  const seen = new Map();
+  for (const p of s.seats) for (const [k, c] of Object.entries(p.counters || {})) if (!seen.has(k)) seen.set(k, c.name);
+  return [...seen].map(([key, name]) => ({ key, name }));
+}
+
+/** A player's value for a counter (0 if none). */
+export const counterOf = (p, name) => (p?.counters?.[counterKey(name)]?.value || 0);
+
+const BUNDLED = new Set(["life", "cmdr", "counter"]);
+const opKey = (o) => (o.op === "life" ? "l:" + o.p : o.op === "counter" ? `n:${o.p}:${counterKey(o.name)}` : `c:${o.to}:${o.from}:${o.part}`);
 
 function append(table, ev, now) {
   const seq = (table.events.length ? table.events[table.events.length - 1].seq : 0) + 1;
@@ -254,6 +279,7 @@ export function bundleDeltas(table, by, now = Date.now()) {
   const out = {};
   if (!last) return out;
   for (const o of last.ops) {
+    if (o.op === "counter") continue; // badges are for life only
     const id = o.op === "life" ? o.p : o.to;
     out[id] = (out[id] || 0) + (o.op === "life" ? o.d : -o.d);
   }
@@ -272,6 +298,7 @@ export function describeOp(s, o) {
     case "remove": return `${name(o.p)} removed`;
     case "rename": return `${o.was} is now ${o.name}`;
     case "life": return `${name(o.p)} ${sgn(o.d)}`;
+    case "counter": return `${name(o.p)} ${o.name} ${sgn(o.d)}`;
     case "cmdr": {
       const src = name(o.from) + "’s commander" + (s.byId[o.from]?.partners || o.part ? (o.part ? " II" : " I") : "");
       return o.d > 0 ? `${name(o.to)} took ${o.d} from ${src}` : `${name(o.to)} ${Math.abs(o.d)} back from ${src}`;

@@ -59,8 +59,13 @@ function PlayerCard({ p, angle, isMonarch, isFirst, spin, badge, killing, onLife
               ${isFirst && html`<${Icon} name="star" size=${15} class="pc-first" />`}<span>${p.name}</span><${Icon} name="pencil" size=${13} class="pc-pencil" /></button>
           </div>
           <div class="pc-life" style=${{ "--len": len }} aria-hidden="true"><span>${fmt(p.life)}</span></div>
-          <div class="pc-bottom" style=${{ width: map.rw + "px", height: map.rh + "px" }}>
-            ${!killing && html`<${CmdrMap} ...${map} victim=${p} angle=${angle} onClick=${onCmdr} />`}
+          <div class="pc-bottom-row" style=${{ height: map.rh + "px" }}>
+            <div class="pc-counters">
+              ${Object.values(p.counters || {}).map((c) => html`<div class="pc-counter"><span>${c.name}:</span> <b>${c.value}</b></div>`)}
+            </div>
+            <div class="pc-bottom" style=${{ width: map.rw + "px", height: map.rh + "px" }}>
+              ${!killing && html`<${CmdrMap} ...${map} victim=${p} angle=${angle} onClick=${onCmdr} />`}
+            </div>
           </div>
         </div>
         <button class=${"pc-crown" + (isMonarch ? " on" : "")} aria-label=${isMonarch ? `${p.name} is the Monarch` : `Make ${p.name} the Monarch`} onClick=${onMonarch}>

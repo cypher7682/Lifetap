@@ -133,6 +133,12 @@ What actually shipped, where it differs from the design below:
   - While recording, it adds those steps to the macro: seats are recorded by name, and your own seat as `#me`.
 - **Repeat:** hold any macro and pick Repeat… to set a count. The macro's "Repeat by default" setting makes a tap ask for one.
 - **No end-of-action damage pool** (decided against).
+- **Player counters:** `{op: "counter", p, name, d}`.
+  - Names are matched case-insensitively and counts never go below 0. They bundle like life, and reset clears them. They show on table cards, bottom left.
+  - Macros use `#<name>#<who>`, e.g. `#poison#opponents`.
+  - The dash's **Table counter** tile shows a mini table of each player's count and opens the same sheet as Table Life.
+  - **Away from a table**, the tile is just your own count, stored on the dash. `#<name>#me` (and `#all` / `#playerRandom`, which can only mean you) changes it, with normal dash undo and reset.
+- The Damage tile is now called **Table Life**.
 
 ## Phase 4 (original design)
 

@@ -13,10 +13,10 @@ const withKeys = (m) => ({ ...m, vars: m.vars.map((x) => ({ ...x })), steps: m.s
 const stripKeys = (m) => ({ ...m, steps: m.steps.map(({ _k, ...s }) => s) });
 const refKey = (r) =>
   r.kind === "tile" ? "t:" + r.tileId : r.kind === "toggle" ? "g:" + r.toggleId : r.kind === "dvar" ? "d:" + r.varId
-    : r.kind === "table" ? "b:" + (r.who === "name" ? "name:" + r.name : r.who) : "v:" + r.name;
+    : r.kind === "table" ? "b:" + (r.stat || "life") + "|" + (r.who === "name" ? "name:" + r.name : r.who) : "v:" + r.name;
 function keyRef(k) {
   const v = k.slice(2);
-  if (k.startsWith("b:")) return v.startsWith("name:") ? E.tableRef("name", v.slice(5)) : E.tableRef(v);
+  if (k.startsWith("b:")) return E.keyTableRef(v);
   if (k.startsWith("t:")) return { kind: "tile", tileId: v };
   if (k.startsWith("g:")) return { kind: "toggle", toggleId: v };
   if (k.startsWith("d:")) return { kind: "dvar", varId: v };
@@ -36,16 +36,27 @@ function RefOptions({ s, vars }) {
     ${vars.length > 0 && html`<optgroup label="Macro variables">${vars.map((x) => html`<option value=${"v:" + x.name}>$${x.name}</option>`)}</optgroup>`}`;
 }
 
-/** #life targets: the fixed selectors, then everyone at your table now, plus any name already used here. */
-function TableOptions({ current }) {
+/**
+ * #table targets: life, then every player counter (from this dash's Table counter tiles and the
+ * table you're at), each with the fixed selectors and everyone at your table now.
+ */
+function TableOptions({ s, current }) {
   const t = tables.current();
-  const names = t ? T.state(t).seats.filter((p) => p.id !== t.me).map((p) => p.name) : [];
-  if (current && current.kind === "table" && current.who === "name" && !names.includes(current.name)) names.push(current.name);
-  return html`
-    <optgroup label="Table life (#)">
-      ${E.TABLE_WHO.map((w) => html`<option value=${"b:" + w}>#life#${w}</option>`)}
-      ${names.map((n) => html`<option value=${"b:name:" + n}>#life#${n}</option>`)}
-    </optgroup>`;
+  const st = t && T.state(t);
+  const names = st ? st.seats.filter((p) => p.id !== t.me).map((p) => p.name) : [];
+  const stats = ["life"];
+  const add = (n) => n && !stats.some((x) => x.toLowerCase() === n.toLowerCase()) && stats.push(n);
+  s.cells.forEach((c) => c && c.kind === "tcounter" && add(c.name));
+  if (st) T.counterNames(st).forEach((c) => add(c.name));
+  if (current && current.kind === "table") {
+    add(current.stat || "life");
+    if (current.who === "name" && !names.includes(current.name)) names.push(current.name);
+  }
+  return stats.map((stat) => html`
+    <optgroup label=${stat === "life" ? "Table life (#life)" : `Table counter (#${stat})`}>
+      ${E.TABLE_WHO.map((w) => html`<option value=${"b:" + stat + "|" + w}>#${stat}#${w}</option>`)}
+      ${names.map((n) => html`<option value=${"b:" + stat + "|name:" + n}>#${stat}#${n}</option>`)}
+    </optgroup>`);
 }
 
 function TargetSelect({ s, macro, step, onChange }) {
@@ -58,7 +69,7 @@ function TargetSelect({ s, macro, step, onChange }) {
       <select aria-label="Target" value=${broken ? "" : refKey(step.target)} onChange=${(e) => onChange(keyRef(e.currentTarget.value))}>
         ${broken && html`<option value="" disabled>${removedLabel(step.target)}</option>`}
         <${RefOptions} s=${s} vars=${varsFor(macro)} />
-        <${TableOptions} current=${step.target} />
+        <${TableOptions} s=${s} current=${step.target} />
       </select>
     </div>`;
 }
