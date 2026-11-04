@@ -20,5 +20,5 @@ Things we've talked about but not built yet. Newest ideas at the top of each sec
 ## Shipping
 
 - [ ] **Push Lifetap to GitHub (`main` → Pages)** when happy. Everything since the tables work started lives on the local `tables` branch, tailnet only.
-  - Before that, decide how Pages users reach the table server. It's tailnet-only today (`public/js/config.js`). Options: Tailscale Funnel or a public host.
+  - The table server goes public via Tailscale Funnel (chart side done). Waiting on the funnel nodeAttr in the tailnet policy, then check from outside the tailnet. `public/js/config.js` already points at that hostname.
 - [ ] Add a `helm lint` / template check for `charts/lifetap` once helm is on the box.

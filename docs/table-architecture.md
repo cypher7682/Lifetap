@@ -89,6 +89,11 @@ otherwise it treats it as a new event.
 What actually shipped, where it differs from the design below:
 - **Transport:** plain HTTP POST for actions plus **Server-Sent Events** for live updates, instead of a WebSocket. No dependencies (`server/server.mjs` uses node:http and node:sqlite, and imports `public/js/table.js`).
 - **Deploy:** Argo CD, from `cypher7682/cluster-control` → `charts/lifetap` (namespace `lifetap`, 1Gi local-path PVC, node:24-alpine running the code from a ConfigMap built from the chart's `files/`). The ingress is the `lifetap-api` entry in `charts/tailscale/values.yaml`, giving https://lifetap-api.tail63e765.ts.net. To ship server changes, run `scripts/sync-cluster-control.sh <checkout>`, then commit and push cluster-control.
+- **Public access:** Tailscale Funnel on the same hostname (`funnel: true` for `lifetap-api` in `charts/tailscale/values.yaml`). It needs the `funnel` nodeAttr for the operator's proxies in the tailnet policy.
+- **Pod hardening:**
+  - Non-root (uid 1000), read-only root filesystem, all capabilities dropped, RuntimeDefault seccomp, no service account token.
+  - NetworkPolicy: traffic in only from its Tailscale proxy pod, **no traffic out at all** (verified: internet, LAN and cluster API all time out).
+  - Rate limits key on the last `X-Forwarded-For` entry, the one the proxy adds.
 - **Bundling** happens on the server. Clients send raw ops, and the server merges them using the member's device id.
 - **Clients** apply their own actions straight away and replay any still-unacknowledged actions on top of the server's log (`public/js/sync.js`).
 - **Joining:** the owner seats a joiner as a new player or as an unclaimed seat (renamed to the joiner's name).
