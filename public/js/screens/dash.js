@@ -7,6 +7,7 @@ import { IconPicker, ColorPicker, GridSizer } from "./pickers.js";
 import { VarSheet } from "./editor.js";
 import * as tables from "../tablestore.js";
 import { ViewSwitch } from "../viewswitch.js";
+import { DamageTile, DamageSheet } from "./damage.js";
 
 // Edit mode survives a trip to the step editor and back.
 const session = new Map();
@@ -674,7 +675,7 @@ export function DashScreen({ id, nav, autoTurn }) {
 
   const removeCell = (index) => {
     const c = v.cells[index];
-    const name = !c ? "" : c.kind === "counter" ? c.name : c.kind === "macro" ? E.cellMacroIds(c).map((mid) => E.findMacro(v, mid)?.name).filter(Boolean).join(", ") || "macro" : c.kind === "toggles" ? "toggle box" : "vars box";
+    const name = !c ? "" : c.kind === "counter" ? c.name : c.kind === "macro" ? E.cellMacroIds(c).map((mid) => E.findMacro(v, mid)?.name).filter(Boolean).join(", ") || "macro" : c.kind === "toggles" ? "toggle box" : c.kind === "damage" ? "damage tile" : "vars box";
     setSheet(null);
     setSelected(null);
     editWithUndo(`Removed “${name}”`, (s) => E.removeCell(s, index));
@@ -716,6 +717,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     const s0 = E.view(store.get(id));
     const box = kind === "toggles"
       ? E.newToggleBox([`Toggle ${E.toggles(s0).length + 1}`])
+      : kind === "damage" ? E.newDamageBox()
       : E.newVarsBox(E.dashVars(s0).map((x) => x.id));
     store.update(id, (d) => E.editDraft(d, (s) => {
       const cells = s.cells.slice();
@@ -782,6 +784,10 @@ export function DashScreen({ id, nav, autoTurn }) {
       return html`<${ToggleBox} key=${cell.id} cell=${cell} turn=${turn} onFlip=${flip} />`;
     }
     if (cell.kind === "vars") return html`<${VarsBox} key=${cell.id} cell=${cell} vars=${E.dashVars(v)} turn=${turn} />`;
+    if (cell.kind === "damage") {
+      return html`<${DamageTile} key=${cell.id} turn=${turn}
+        onOpen=${() => (tables.current() ? setSheet({ type: "damage" }) : toast("Start or join a table first (home screen)"))} />`;
+    }
     const ms = E.cellMacroIds(cell).map((mid) => E.findMacro(v, mid)).filter(Boolean);
     if (!ms.length) return html`<div class="cell-empty" key=${"e" + i}></div>`;
     const isRec = recTargetIsCell(cell);
@@ -799,6 +805,15 @@ export function DashScreen({ id, nav, autoTurn }) {
       const b = slotDrag.bind({ zone: "cell", index: i }, () => setSheet({ type: "add", index: i }));
       return html`<button key=${"e" + i} ...${b} class=${"tile edit-tile edit-empty" + b.class} aria-label="Empty cell. Add a counter, macro, toggles or vars box.">
         <${Icon} name="plus" size=${28} /></button>`;
+    }
+    if (cell.kind === "damage") {
+      const bind = slotDrag.bind({ zone: "cell", index: i }, () => { setSelected(i); setSheet({ type: "damagecell", index: i }); });
+      return html`
+        <button key=${cell.id} ...${bind} class=${"tile edit-tile" + (selected === i ? " picked" : "") + bind.class} aria-label="Edit damage tile. Hold and drag to move.">
+          <span class="c-red"><${Icon} name="lightning" size=${24} /></span>
+          <span class="edit-name">Damage</span>
+          <span class="edit-kind c-red">table</span>
+        </button>`;
     }
     if (cell.kind === "toggles" || cell.kind === "vars") {
       const isT = cell.kind === "toggles";
@@ -935,6 +950,7 @@ export function DashScreen({ id, nav, autoTurn }) {
             <button class="choice choice-macro" onClick=${() => addMacroCell(sheet.index)}><${Icon} name="play" size=${30} /><b>Macro</b><span>A big ▶ button that runs steps</span></button>
             <button class="choice" onClick=${() => addBox(sheet.index, "toggles")}><${Icon} name="toggle" size=${30} /><b>Toggles</b><span>One or two on/off switches</span></button>
             <button class="choice choice-vars" onClick=${() => addBox(sheet.index, "vars")}><${Icon} name="vars" size=${30} /><b>Vars box</b><span>Shows up to 4 @variables</span></button>
+            <button class="choice choice-dmg" onClick=${() => addBox(sheet.index, "damage")}><${Icon} name="lightning" size=${30} /><b>Damage</b><span>Hand out damage at the table</span></button>
           </div>
         <//>`;
     } else if (sheet.type === "macrobox") {
@@ -970,6 +986,18 @@ export function DashScreen({ id, nav, autoTurn }) {
           nav.push({ name: "trigger", id, tileId: toggleId, triggerId: tr.id });
         }}
         onDeleteTrigger=${(toggleId, triggerId) => editWithUndo("Deleted trigger", (st) => setToggleTriggers(st, toggleId, (trs) => trs.filter((x) => x.id !== triggerId)))} />`;
+    } else if (sheet.type === "damage") {
+      sheetEl = html`<${DamageSheet} turn=${turn} onClose=${close} />`;
+    } else if (sheet.type === "damagecell") {
+      sheetEl = html`
+        <${Sheet} onClose=${close} label="Damage tile">
+          <h2 class="sheet-title">Damage tile</h2>
+          <p class="hint">Tap it while you're playing to hand out damage at your table, as life loss or commander damage. It needs a table: start or join one from the home screen.</p>
+          <div class="sheet-row">
+            <button class="btn btn-danger-soft" onClick=${() => removeCell(sheet.index)}><${Icon} name="trash" size=${20} /> Remove</button>
+            <button class="btn btn-primary" onClick=${close}>Done</button>
+          </div>
+        <//>`;
     } else if (sheet.type === "varscell") {
       sheetEl = html`<${VarsBoxSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)}
         onNewVar=${() => setSheet({ type: "dvar", varId: null, thenBox: sheet.index })} />`;

@@ -143,6 +143,11 @@ export function newVarsBox(show = []) {
   return { kind: "vars", id: uid(), show: show.slice(0, MAX_BOX_VARS) };
 }
 
+/** Damage tile: opens the table's damage allocation. No state of its own. */
+export function newDamageBox() {
+  return { kind: "damage", id: uid() };
+}
+
 export function newMacro(name, overrides = {}) {
   return { id: uid(), name, icon: "altar", repeats: false, vars: [], steps: [], ...overrides };
 }
@@ -202,6 +207,7 @@ export function duplicateDash(dash, name) {
       return { ...c, id: uid(), toggles: c.toggles.map((t) => ({ ...t, id: re(t.id), ...(t.triggers ? { triggers: t.triggers.map(copyTrigger) } : {}) })) };
     }
     if (c.kind === "vars") return { ...c, id: uid(), show: c.show.map(re) };
+    if (c.kind === "damage") return { ...c, id: uid() };
     return macroCell(cellMacroIds(c).map((m) => macroMap.get(m)));
   });
   const macros = src.macros.map((m) => ({

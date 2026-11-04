@@ -976,3 +976,34 @@ h1, h2, p { margin: 0; }
 .pl-cell-x { flex: none; width: 36px; height: 36px; display: grid; place-items: center; color: var(--muted); border-radius: 50%; }
 .pl-cell.drop-ok { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); background: rgba(63, 183, 189, .1); }
 .pl-cell.dragging { border-color: var(--teal) !important; }
+
+/* ---------- damage tile + allocation */
+.damage-tile { border-color: rgba(229, 72, 77, .35); }
+.dmg-btn { align-items: center; justify-content: center; gap: 4px; width: 100%; text-align: center; }
+.tile.turned .dmg-btn { width: 100cqh; }
+.dmg-btn:active { background: rgba(229, 72, 77, .08); }
+.dmg-icon { width: min(52px, 30cqh); height: min(52px, 30cqh); border-radius: 50%; display: grid; place-items: center; background: rgba(229, 72, 77, .16); color: var(--red-text); }
+.dmg-name { font-size: min(17px, 14cqh); font-weight: 620; }
+.dmg-sub { font-size: min(13px, 11cqh); color: var(--muted); }
+.dmg-sheet .sheet-title .muted { margin-left: 6px; font-weight: 500; }
+.dmg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 6px; }
+.dmg-card {
+  min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px 8px;
+  background: var(--surface); border: 2px solid currentColor; border-radius: 18px;
+}
+.dmg-card.self { background: #2a2d34; border-style: dashed; }
+.dmg-card.dead { opacity: .45; }
+.dmg-card.on { box-shadow: inset 0 0 0 1px currentColor; }
+.dmg-card-name { font-size: 15px; font-weight: 620; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dmg-main { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
+.dmg-pm { width: 46px; height: 46px; flex: none; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line-2); color: var(--text); font-size: 24px; }
+.dmg-pm:disabled, .dmg-ten:disabled { opacity: .35; }
+.dmg-val { min-width: 2ch; text-align: center; font-size: 34px; font-weight: 620; color: var(--text); font-variant-numeric: tabular-nums; }
+.dmg-card.on .dmg-val { color: var(--red-text); }
+.dmg-tens { display: flex; gap: 8px; width: 100%; justify-content: center; }
+.dmg-ten { flex: 1; max-width: 72px; height: 34px; border-radius: 11px; background: var(--surface-2); color: var(--muted); font-size: 14px; font-weight: 600; }
+.dmg-cmdr { margin-top: 6px; color: var(--text); }
+.dmg-cmdr.off { color: var(--muted); }
+.dmg-part { margin-left: auto; margin-right: 12px; }
+.dmg-actions { margin-top: 12px; }
+.choice-dmg .ic { color: var(--red-text); }
