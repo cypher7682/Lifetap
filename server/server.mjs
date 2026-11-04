@@ -144,7 +144,9 @@ function readBody(req) {
   });
 }
 
-const ip = (req) => String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+// The Tailscale proxy appends the real client address to X-Forwarded-For, so use the last entry:
+// anything before it was sent by the caller and can't be trusted for rate limits.
+const ip = (req) => String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",").pop().trim();
 
 // ---------------------------------------------------------------- broadcasting
 
