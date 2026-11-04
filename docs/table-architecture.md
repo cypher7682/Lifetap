@@ -137,7 +137,7 @@ What actually shipped, where it differs from the design below:
   - Names are matched case-insensitively and counts never go below 0. They bundle like life, and reset clears them. They show on table cards, bottom left.
   - Macros use `#<name>#<who>`, e.g. `#poison#opponents`.
   - The dash's **Table counter** tile shows a mini table of each player's count and opens the same sheet as Table Life.
-  - **Away from a table**, the tile is just your own count, stored on the dash. `#<name>#me` (and `#all` / `#playerRandom`, which can only mean you) changes it, with normal dash undo and reset.
+  - **Away from a table**, the tile says "No table". Tapping it offers a **quick table**: pick how many players and you get an offline, counters-only table on this phone (`quick: true`). At a quick table the Table Life tile still says "No table", and `#life` steps are skipped.
 - The Damage tile is now called **Table Life**.
 
 ## Phase 4 (original design)

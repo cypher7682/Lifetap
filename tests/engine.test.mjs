@@ -531,15 +531,11 @@ test("table counters: #poison#<who> steps and recorded keys", () => {
   assert.deepEqual(steps.map((x) => `${E.refLabel(null, x.target)} ${x.op} ${x.value}`), ["#Rad#Dave + 2", "#life#opponentRandom - 1", "#life#me + 1"]);
 });
 
-test("table counters away from a table: #x#me changes the tile's own count; undo and reset work", () => {
-  let d = E.createDash({ name: "t", count: 1, grid: { cols: 2, rows: 2 } });
-  d = { ...d, cells: [...d.cells.slice(0, 1), E.newTableCounterBox("Poison"), ...d.cells.slice(2)] };
-  const s = E.view(d);
-  const m = { vars: [], steps: [{ target: E.tableRef("me", undefined, "poison"), op: "+", value: 2 }, { target: E.tableRef("opponents", undefined, "Poison"), op: "+", value: 1 }] };
-  const r = E.macroEvent(s, m, 3, null);
-  assert.equal(r.tableSkipped, 3, "opponents can't mean anything without a table");
-  d = E.commitEvent(d, r.event);
-  assert.equal(E.tableCounterCells(E.view(d))[0].value, 6);
-  assert.equal(E.tableCounterCells(E.view(E.undo(d)))[0].value, 0);
-  assert.equal(E.tableCounterCells(E.view(E.resetDash(d)))[0].value, 0);
+
+test("a quick (counters-only) table skips #life steps but runs counter steps", () => {
+  const d = E.createDash({ name: "t", count: 1, grid: { cols: 2, rows: 2 } });
+  const m = { vars: [], steps: [{ target: E.tableRef("opponents"), op: "-", value: 1 }, { target: E.tableRef("name", "Dave", "Poison"), op: "+", value: 1 }] };
+  const r = E.runMacro(E.view(d), m, 1, { ...table(), quick: true });
+  assert.equal(r.tableSkipped, 1);
+  assert.deepEqual(r.tableOps, [{ p: "d", stat: "Poison", d: 1 }]);
 });

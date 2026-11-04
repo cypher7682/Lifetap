@@ -97,12 +97,8 @@ export function holderValues(s) {
   for (const t of counters(s)) m.set(t.id, t.value);
   for (const t of toggles(s)) m.set(t.id, t.value ? 1 : 0);
   for (const v of dashVars(s)) m.set(v.id, v.value);
-  for (const c of tableCounterCells(s)) m.set(c.id, c.value || 0);
   return m;
 }
-
-/** Table Counter tiles. Each keeps your own count for when you're not at a table. */
-export const tableCounterCells = (s) => s.cells.filter((c) => c && c.kind === "tcounter");
 
 /** The id of the persistent value a ref points at, or null for a per-run $var. */
 export function holderId(ref) {
@@ -157,7 +153,7 @@ export function keyTableRef(key) {
 
 /** Table Counter tile: a named player counter at the table (poison, rad…). */
 export function newTableCounterBox(name = "Poison") {
-  return { kind: "tcounter", id: uid(), name, value: 0 };
+  return { kind: "tcounter", id: uid(), name };
 }
 
 export function newDamageBox() {
@@ -504,8 +500,6 @@ class TriggerLoop {}
 export function runMacro(s, macro, times = 1, table = null) {
   const ctx = {
     table,
-    // away from a table, #<counter>#me (and #all / #playerRandom, which can only mean you) changes the tile's own count
-    localCounters: new Map(tableCounterCells(s).map((c) => [String(c.name).toLowerCase(), c.id])),
     tableOps: [],
     tableSkipped: 0,
     missing: new Set(),
@@ -559,12 +553,8 @@ function execSteps(ctx, macro, change) {
       if (!literal && !has(step.value)) { ctx.broken.add(step); continue; }
       if (step.op !== "+" && step.op !== "-") { ctx.broken.add(step); continue; }
       const v = literal ? toInt(step.value) : read(step.value);
-      if (!ctx.table) {
-        const local = statOf(step.target) !== "life" && ["me", "all", "playerRandom"].includes(step.target.who) && ctx.localCounters.get(statOf(step.target).toLowerCase());
-        if (!local) { ctx.tableSkipped++; continue; }
-        ctx.values.set(local, Math.max(0, ctx.values.get(local) + (step.op === "+" ? v : -v)));
-        continue;
-      }
+      // a quick table (offline, just for counters) has no life to change
+      if (!ctx.table || (ctx.table.quick && statOf(step.target) === "life")) { ctx.tableSkipped++; continue; }
       const hit = tableTargets(ctx.table, step.target);
       if (!hit.length && step.target.who === "name") ctx.missing.add(step.target.name);
       for (const p of hit) ctx.tableOps.push({ p: p.id, stat: statOf(step.target), d: step.op === "+" ? v : -v });
@@ -690,10 +680,6 @@ function setValues(cells, map) {
       changed = true;
       return { ...c, value: map.get(c.id) };
     }
-    if (c && c.kind === "tcounter" && map.has(c.id) && (c.value || 0) !== map.get(c.id)) {
-      changed = true;
-      return { ...c, value: map.get(c.id) };
-    }
     if (c && c.kind === "toggles" && c.toggles.some((t) => map.has(t.id) && t.value !== map.get(t.id))) {
       changed = true;
       return { ...c, toggles: c.toggles.map((t) => (map.has(t.id) ? { ...t, value: map.get(t.id) } : t)) };
@@ -776,7 +762,6 @@ export function resetDash(dash) {
     for (const t of counters(s)) map.set(t.id, t.start);
     for (const t of toggles(s)) map.set(t.id, 0);
     for (const v of dashVars(s)) map.set(v.id, v.initial);
-    for (const c of tableCounterCells(s)) map.set(c.id, 0);
   }
   return { ...withValues(dash, map), log: [], redo: [] };
 }

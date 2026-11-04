@@ -1046,3 +1046,5 @@ h1, h2, p { margin: 0; }
 .tcn-cell b { color: var(--text); font-size: clamp(10px, 56cqmin, 26px); font-weight: 650; font-variant-numeric: tabular-nums; }
 .choice-tcounter .ic { color: var(--purple); }
 .dmg-now { color: var(--muted); font-weight: 500; font-size: 12px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.tcn-none { flex: 1; display: grid; place-content: center; gap: 2px; text-align: center; color: var(--muted); font-size: min(15px, 12cqh); font-weight: 560; }
+.tcn-none small { font-size: min(12px, 10cqh); font-weight: 450; color: #6b707a; }

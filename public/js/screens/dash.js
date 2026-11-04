@@ -7,7 +7,8 @@ import { IconPicker, ColorPicker, GridSizer } from "./pickers.js";
 import { VarSheet } from "./editor.js";
 import * as tables from "../tablestore.js";
 import { ViewSwitch } from "../viewswitch.js";
-import { DamageTile, DamageSheet, TableCounterTile } from "./damage.js";
+import { DamageTile, DamageSheet, TableCounterTile, QuickTableSheet } from "./damage.js";
+import * as T from "../table.js";
 import { tableContext, sendLife, describeLife } from "../tablelink.js";
 
 // Edit mode survives a trip to the step editor and back.
@@ -619,16 +620,13 @@ export function DashScreen({ id, nav, autoTurn }) {
    * Runs them as #table steps, so random picks and recording work the same as macros.
    */
   const dealDamage = (alloc) => {
-    const ctx = tableContext(); // null away from a table: then counter steps change the tile's own count
+    const ctx = tableContext();
+    if (!ctx) return;
     const steps = alloc.map(({ key, d }) => ({ target: E.keyTableRef(key), op: d > 0 ? "+" : "-", value: Math.abs(d) }));
     const r = E.runMacro(E.view(store.get(id)), { vars: [], steps }, 1, ctx);
     if (ctx && r.tableOps.length) {
       sendLife(ctx.id, r.tableOps);
       toast(describeLife(ctx.id, r.tableOps));
-    }
-    if (r.changes.length) {
-      const label = alloc.map(({ key, d }) => `${E.refLabel(null, E.keyTableRef(key))} ${d > 0 ? "+" : "−"}${Math.abs(d)}`).join(", ");
-      commit(E.makeEvent("tap", label, r.changes));
     }
     if (recRef.current) {
       setRec((rr) => {
@@ -638,6 +636,9 @@ export function DashScreen({ id, nav, autoTurn }) {
       });
     }
   };
+
+  /** Table Life / Table counter: open their pane, or offer a quick offline table first. */
+  const openTableSheet = (then) => setSheet(tables.current() ? then : { type: "quicktable", then });
 
   const tapMacro = (macroId) => {
     const m = E.findMacro(v, macroId);
@@ -844,10 +845,10 @@ export function DashScreen({ id, nav, autoTurn }) {
     if (cell.kind === "vars") return html`<${VarsBox} key=${cell.id} cell=${cell} vars=${E.dashVars(v)} turn=${turn} />`;
     if (cell.kind === "damage") {
       return html`<${DamageTile} key=${cell.id} turn=${turn}
-        onOpen=${() => (tables.current() ? setSheet({ type: "damage" }) : toast("Start or join a table first (home screen)"))} />`;
+        onOpen=${() => (tables.current() && !tables.current().quick ? setSheet({ type: "damage" }) : toast("Table Life needs a table: start or join one from the home screen"))} />`;
     }
     if (cell.kind === "tcounter") {
-      return html`<${TableCounterTile} key=${cell.id} cell=${cell} turn=${turn} onOpen=${() => setSheet({ type: "damage", stat: cell.name, cellId: cell.id })} />`;
+      return html`<${TableCounterTile} key=${cell.id} cell=${cell} turn=${turn} onOpen=${() => openTableSheet({ type: "damage", stat: cell.name })} />`;
     }
     const ms = E.cellMacroIds(cell).map((mid) => E.findMacro(v, mid)).filter(Boolean);
     if (!ms.length) return html`<div class="cell-empty" key=${"e" + i}></div>`;
@@ -1055,8 +1056,14 @@ export function DashScreen({ id, nav, autoTurn }) {
         }}
         onDeleteTrigger=${(toggleId, triggerId) => editWithUndo("Deleted trigger", (st) => setToggleTriggers(st, toggleId, (trs) => trs.filter((x) => x.id !== triggerId)))} />`;
     } else if (sheet.type === "damage") {
-      const local = sheet.cellId ? v.cells.find((c) => c && c.id === sheet.cellId)?.value || 0 : 0;
-      sheetEl = html`<${DamageSheet} turn=${turn} stat=${sheet.stat || "life"} local=${local} onClose=${close} onDone=${(alloc) => { close(); dealDamage(alloc); }} />`;
+      sheetEl = html`<${DamageSheet} turn=${turn} stat=${sheet.stat || "life"} onClose=${close} onDone=${(alloc) => { close(); dealDamage(alloc); }} />`;
+    } else if (sheet.type === "quicktable") {
+      sheetEl = html`<${QuickTableSheet} turn=${turn} onClose=${close} onStart=${(n) => {
+        const me = localStorage.getItem("lifetap:name") || "Player 1";
+        const names = [me, ...Array.from({ length: n - 1 }, (_, i) => `Player ${i + 2}`)];
+        tables.put({ ...T.createTable({ names, by: tables.deviceId }), myDash: id, quick: true });
+        setSheet(sheet.then);
+      }} />`;
     } else if (sheet.type === "tcountercell") {
       sheetEl = html`<${TableCounterCellSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)} />`;
     } else if (sheet.type === "damagecell") {

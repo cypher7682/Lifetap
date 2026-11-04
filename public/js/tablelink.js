@@ -3,12 +3,12 @@ import * as sync from "./sync.js";
 import * as T from "./table.js";
 // What the dash's macro engine needs to know about the table you're at, and how it sends life changes there.
 
-/** {id, me, seats: [{id, name, dead}], rand} for the live table, or null. */
+/** {id, me, quick, seats: [{id, name, dead}], rand} for the live table, or null. quick = an offline counters-only table. */
 export function tableContext() {
   const t = tables.current();
   if (!t) return null;
   const s = T.state(t);
-  return { id: t.id, me: t.me, seats: s.seats.map((p) => ({ id: p.id, name: p.name, dead: p.dead })), rand: Math.random };
+  return { id: t.id, me: t.me, quick: !!t.quick, seats: s.seats.map((p) => ({ id: p.id, name: p.name, dead: p.dead })), rand: Math.random };
 }
 
 /** Send changes [{p, d, stat?}] to a table as one action (no stat = life; else a player counter). */
