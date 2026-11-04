@@ -1057,3 +1057,7 @@ h1, h2, p { margin: 0; }
 .pp-chip.on { color: var(--teal); border: 1.5px solid var(--teal); background: rgba(63, 183, 189, .12); }
 .step-grid.has-pp { grid-template-columns: 22px minmax(0, 1fr) 46px minmax(0, .8fr) 40px 32px; gap: 4px; }
 .step-grid.has-pp .step-del { width: 32px; }
+.tlife-tile { border-color: rgba(229, 72, 77, .35); }
+.tlife-tile .tcn-head { color: var(--red-text); }
+.tlife-tile .tcn-btn:active { background: rgba(229, 72, 77, .08); }
+.tcn-cell.dead { opacity: .35; }

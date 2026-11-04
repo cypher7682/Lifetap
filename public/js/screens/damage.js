@@ -13,49 +13,43 @@ const PP_KEY = "lifetap:random-split";
 const signed = (n) => (n > 0 ? "+" + n : n < 0 ? "−" + Math.abs(n) : "0");
 const tone = (n) => (n < 0 ? " neg" : n > 0 ? " pos" : "");
 
-/** Play-mode tile. */
+/** Table Life tile: the same preview as a table counter, showing everyone's life. */
 export function DamageTile({ turn, onOpen }) {
-  const t = tables.current();
-  const press = usePress({ onTap: onOpen });
-  return html`
-    <div class=${"tile damage-tile" + (turn ? " turned" : "")}>
-      <button class="tc dmg-btn" style=${turn ? { "--turn": turn + "deg" } : null} aria-label=${t ? `Table Life: change life at table ${t.code}` : "Table Life: no table yet"} ...${press}>
-        <span class="dmg-icon"><${Icon} name="heart" size=${26} /></span>
-        <span class="dmg-name">Table Life</span>
-        <span class="dmg-sub">${t ? html`Table <span class="tbl-code">#${t.code}</span>` : "No table · tap to start one"}</span>
-      </button>
-    </div>`;
+  return html`<${TableCounterTile} cell=${{ name: "Table Life" }} stat="life" turn=${turn} onOpen=${onOpen} />`;
 }
 
 /**
  * Table Counter tile: the counter's name and a little copy of the table with each player's count
  * (yours greyed). With no table it says so; tapping then offers to start one.
  */
-export function TableCounterTile({ cell, turn, onOpen }) {
+export function TableCounterTile({ cell, stat = cell.name, turn, onOpen }) {
   const t = tables.current();
   const press = usePress({ onTap: onOpen });
+  const life = stat === "life";
+  const cls = "tile tcounter-tile" + (life ? " tlife-tile" : "") + (turn ? " turned" : "");
+  const head = html`<span class="tcn-head"><${Icon} name=${life ? "heart" : "table"} size=${15} /><span>${cell.name}</span></span>`;
   if (!t) {
     return html`
-      <div class=${"tile tcounter-tile" + (turn ? " turned" : "")}>
+      <div class=${cls}>
         <button class="tc tcn-btn" style=${turn ? { "--turn": turn + "deg" } : null} aria-label=${`${cell.name}: no table. Tap to start one.`} ...${press}>
-          <span class="tcn-head"><${Icon} name="table" size=${15} /><span>${cell.name}</span></span>
+          ${head}
           <span class="tcn-none">No table<small>tap to start one</small></span>
         </button>
       </div>`;
   }
   const s = T.state(t);
-  const seats = s.seats.map((p) => ({ id: p.id, me: p.id === t.me, n: T.counterOf(p, cell.name), name: p.name }));
+  const seats = s.seats.map((p) => ({ id: p.id, me: p.id === t.me, n: life ? p.life : T.counterOf(p, stat), name: p.name, dead: p.dead }));
   const grid = T.seatGrid(seats.length);
   return html`
-    <div class=${"tile tcounter-tile" + (turn ? " turned" : "")}>
+    <div class=${cls}>
       <button class="tc tcn-btn" style=${turn ? { "--turn": turn + "deg" } : null}
         aria-label=${`${cell.name}: ${seats.map((p) => `${p.name} ${p.n}`).join(", ")}. Tap to change.`} ...${press}>
-        <span class="tcn-head"><${Icon} name="table" size=${15} /><span>${cell.name}</span></span>
+        ${head}
         <span class="tcn-map" style=${{ gridTemplateRows: `repeat(${grid.rows}, minmax(0, 1fr))` }}>
           ${seats.map((p, i) => {
             const c = grid.cells[i];
-            return html`<span key=${p.id} class=${"tcn-cell" + (p.me ? " self" : "")}
-              style=${{ gridRow: c.row + 1, gridColumn: c.span === 2 ? "1 / span 2" : c.col + 1 }}><b>${p.n}</b></span>`;
+            return html`<span key=${p.id} class=${"tcn-cell" + (p.me ? " self" : "") + (p.dead ? " dead" : "")}
+              style=${{ gridRow: c.row + 1, gridColumn: c.span === 2 ? "1 / span 2" : c.col + 1 }}><b>${p.n < 0 ? "−" + -p.n : p.n}</b></span>`;
           })}
         </span>
       </button>
