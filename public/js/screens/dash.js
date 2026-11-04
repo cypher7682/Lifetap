@@ -9,6 +9,7 @@ import * as tables from "../tablestore.js";
 import { ViewSwitch } from "../viewswitch.js";
 import { DamageTile, DamageSheet, TableCounterTile, QuickTableSheet } from "./damage.js";
 import * as T from "../table.js";
+import * as sync from "../sync.js";
 import { tableContext, sendLife, describeLife } from "../tablelink.js";
 
 // Edit mode survives a trip to the step editor and back.
@@ -637,7 +638,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     }
   };
 
-  /** Table Life / Table counter: open their pane, or offer a quick offline table first. */
+  /** Table Life / Table counter: open their pane, or offer to start a table first. */
   const openTableSheet = (then) => setSheet(tables.current() ? then : { type: "quicktable", then });
 
   const tapMacro = (macroId) => {
@@ -844,8 +845,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     }
     if (cell.kind === "vars") return html`<${VarsBox} key=${cell.id} cell=${cell} vars=${E.dashVars(v)} turn=${turn} />`;
     if (cell.kind === "damage") {
-      return html`<${DamageTile} key=${cell.id} turn=${turn}
-        onOpen=${() => (tables.current() && !tables.current().quick ? setSheet({ type: "damage" }) : toast("Table Life needs a table: start or join one from the home screen"))} />`;
+      return html`<${DamageTile} key=${cell.id} turn=${turn} onOpen=${() => openTableSheet({ type: "damage" })} />`;
     }
     if (cell.kind === "tcounter") {
       return html`<${TableCounterTile} key=${cell.id} cell=${cell} turn=${turn} onOpen=${() => openTableSheet({ type: "damage", stat: cell.name })} />`;
@@ -1058,10 +1058,19 @@ export function DashScreen({ id, nav, autoTurn }) {
     } else if (sheet.type === "damage") {
       sheetEl = html`<${DamageSheet} turn=${turn} stat=${sheet.stat || "life"} onClose=${close} onDone=${(alloc) => { close(); dealDamage(alloc); }} />`;
     } else if (sheet.type === "quicktable") {
-      sheetEl = html`<${QuickTableSheet} turn=${turn} onClose=${close} onStart=${(n) => {
+      sheetEl = html`<${QuickTableSheet} turn=${turn} onClose=${close} onStart=${async (n) => {
         const me = localStorage.getItem("lifetap:name") || "Player 1";
         const names = [me, ...Array.from({ length: n - 1 }, (_, i) => `Player ${i + 2}`)];
-        tables.put({ ...T.createTable({ names, by: tables.deviceId }), myDash: id, quick: true });
+        let tid = null;
+        try {
+          tid = await sync.create({ names, startLife: T.DEFAULT_LIFE });
+        } catch (e) {
+          if (!(await confirm("Couldn't reach the table server", `${e.message} You can still run the table on this phone, but nobody else can join it.`, "Start on this phone"))) return;
+          const t = T.createTable({ names, by: tables.deviceId });
+          tables.put(t);
+          tid = t.id;
+        }
+        tables.update(tid, (t) => ({ ...t, myDash: id }));
         setSheet(sheet.then);
       }} />`;
     } else if (sheet.type === "tcountercell") {

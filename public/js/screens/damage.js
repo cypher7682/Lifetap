@@ -15,22 +15,21 @@ const tone = (n) => (n < 0 ? " neg" : n > 0 ? " pos" : "");
 
 /** Play-mode tile. */
 export function DamageTile({ turn, onOpen }) {
-  const cur = tables.current();
-  const t = cur && !cur.quick ? cur : null; // a quick table is counters only
+  const t = tables.current();
   const press = usePress({ onTap: onOpen });
   return html`
     <div class=${"tile damage-tile" + (turn ? " turned" : "")}>
       <button class="tc dmg-btn" style=${turn ? { "--turn": turn + "deg" } : null} aria-label=${t ? `Table Life: change life at table ${t.code}` : "Table Life: no table yet"} ...${press}>
         <span class="dmg-icon"><${Icon} name="heart" size=${26} /></span>
         <span class="dmg-name">Table Life</span>
-        <span class="dmg-sub">${t ? html`Table <span class="tbl-code">#${t.code}</span>` : "No table"}</span>
+        <span class="dmg-sub">${t ? html`Table <span class="tbl-code">#${t.code}</span>` : "No table · tap to start one"}</span>
       </button>
     </div>`;
 }
 
 /**
  * Table Counter tile: the counter's name and a little copy of the table with each player's count
- * (yours greyed). With no table it says so; tapping then offers a quick table.
+ * (yours greyed). With no table it says so; tapping then offers to start one.
  */
 export function TableCounterTile({ cell, turn, onOpen }) {
   const t = tables.current();
@@ -38,7 +37,7 @@ export function TableCounterTile({ cell, turn, onOpen }) {
   if (!t) {
     return html`
       <div class=${"tile tcounter-tile" + (turn ? " turned" : "")}>
-        <button class="tc tcn-btn" style=${turn ? { "--turn": turn + "deg" } : null} aria-label=${`${cell.name}: no table. Tap to start a quick table.`} ...${press}>
+        <button class="tc tcn-btn" style=${turn ? { "--turn": turn + "deg" } : null} aria-label=${`${cell.name}: no table. Tap to start one.`} ...${press}>
           <span class="tcn-head"><${Icon} name="table" size=${15} /><span>${cell.name}</span></span>
           <span class="tcn-none">No table<small>tap to start one</small></span>
         </button>
@@ -135,22 +134,24 @@ export function DamageSheet({ turn = 0, stat = "life", onClose, onDone }) {
 }
 
 /**
- * No table yet: start an offline one on this phone for this session, just by saying how many
- * players. Nobody else needs the app; rename seats from the table view.
+ * No table yet: start one right here, just by saying how many players. It's a normal table:
+ * this phone can run it for everyone, and anyone can join with the code later.
  */
 export function QuickTableSheet({ turn = 0, onClose, onStart }) {
   const [n, setN] = useState(4);
+  const [busy, setBusy] = useState(false);
   const set = (x) => setN(Math.max(1, Math.min(T.MAX_PLAYERS, x)));
   return html`
     <${Sheet} onClose=${onClose} turn=${turn} label="No table">
       <h2 class="sheet-title">No table</h2>
-      <p class="hint">Start a quick table on this phone for this session, just for counters (life stays with a real table). Nobody else needs the app. Rename players from the table view.</p>
+      <p class="hint">Start a table for this game. This phone can run it for everyone, and anyone who wants to can join later from their phone with the code. Rename players from the table view.</p>
       <div class="field-label">How many players?</div>
       <div class="stepper">
         <button class="step-btn" aria-label="Fewer players" disabled=${n <= 1} onClick=${() => set(n - 1)}><${Icon} name="minus" size=${28} /></button>
         <${IntInput} class="stepper-val stepper-input" label="How many players" value=${n} onChange=${set} />
         <button class="step-btn" aria-label="More players" disabled=${n >= T.MAX_PLAYERS} onClick=${() => set(n + 1)}><${Icon} name="plus" size=${28} /></button>
       </div>
-      <button class="btn btn-primary btn-block btn-xl" onClick=${() => onStart(n)}>Start · ${n} player${n === 1 ? "" : "s"}</button>
+      <button class="btn btn-primary btn-block btn-xl" disabled=${busy} onClick=${async () => { setBusy(true); await onStart(n); setBusy(false); }}>
+        ${busy ? "Starting…" : `Start table · ${n} player${n === 1 ? "" : "s"}`}</button>
     <//>`;
 }

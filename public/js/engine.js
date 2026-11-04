@@ -563,8 +563,7 @@ function execSteps(ctx, macro, change) {
       if (!literal && !has(step.value)) { ctx.broken.add(step); continue; }
       if (step.op !== "+" && step.op !== "-") { ctx.broken.add(step); continue; }
       const v = literal ? toInt(step.value) : read(step.value);
-      // a quick table (offline, just for counters) has no life to change
-      if (!ctx.table || (ctx.table.quick && statOf(step.target) === "life")) { ctx.tableSkipped++; continue; }
+      if (!ctx.table) { ctx.tableSkipped++; continue; }
       const d = step.op === "+" ? v : -v;
       if (step.perPoint && RANDOM_WHO.has(step.target.who)) {
         // per point: every point is its own roll, so the total spreads out

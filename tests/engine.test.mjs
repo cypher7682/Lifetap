@@ -532,14 +532,6 @@ test("table counters: #poison#<who> steps and recorded keys", () => {
 });
 
 
-test("a quick (counters-only) table skips #life steps but runs counter steps", () => {
-  const d = E.createDash({ name: "t", count: 1, grid: { cols: 2, rows: 2 } });
-  const m = { vars: [], steps: [{ target: E.tableRef("opponents"), op: "-", value: 1 }, { target: E.tableRef("name", "Dave", "Poison"), op: "+", value: 1 }] };
-  const r = E.runMacro(E.view(d), m, 1, { ...table(), quick: true });
-  assert.equal(r.tableSkipped, 1);
-  assert.deepEqual(r.tableOps, [{ p: "d", stat: "Poison", d: 1 }]);
-});
-
 test("random per point rolls every point; total gives it all to one pick", () => {
   const d = E.createDash({ name: "t", count: 1, grid: { cols: 2, rows: 2 } });
   const rolls = [0, 0.99, 0, 0.99, 0.99];

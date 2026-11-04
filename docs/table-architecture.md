@@ -138,7 +138,7 @@ What actually shipped, where it differs from the design below:
   - Names are matched case-insensitively and counts never go below 0. They bundle like life, and reset clears them. They show on table cards, bottom left.
   - Macros use `#<name>#<who>`, e.g. `#poison#opponents`.
   - The dash's **Table counter** tile shows a mini table of each player's count and opens the same sheet as Table Life.
-  - **Away from a table**, the tile says "No table". Tapping it offers a **quick table**: pick how many players and you get an offline, counters-only table on this phone (`quick: true`). At a quick table the Table Life tile still says "No table", and `#life` steps are skipped.
+  - **No table:** both tiles say "No table". Tapping one offers to start a table there and then: pick how many players, and it's a normal joinable table, with an offline fallback if the server can't be reached. Then the pane opens. This phone can run it for everyone, and others can join later with the code.
 - The Damage tile is now called **Table Life**.
 
 ## Phase 4 (original design)
