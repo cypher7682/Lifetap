@@ -1,2 +1,3 @@
-// Where the table server lives. Tailnet-only for now (k8s pod, see deploy/k8s/).
+// Where the table server lives: the home cluster (cypher7682/cluster-control, charts/lifetap),
+// public via Tailscale Funnel, so the app on GitHub Pages can reach it too.
 export const API_URL = "https://lifetap-api.tail63e765.ts.net";
