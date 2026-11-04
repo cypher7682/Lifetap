@@ -120,7 +120,21 @@ What actually shipped, where it differs from the design below:
 - **TTL:** a sweep every minute deletes tables whose `updated_at` is more than 60 minutes ago (events, members, requests cascade). Clients see `gone` and drop the table.
 - **Offline:** clients queue submits while disconnected and send them on reconnect. The server orders them on arrival.
 
-## Phase 4 (design)
+## Phase 4: table steps in macros (built)
+
+- **Target:** `#life#<who>`, with + and − only. Who is one of: `#opponents`, `#opponentRandom`, `#playerRandom`, `#me`, `#all`, or `#<playerName>`.
+  - Only living players count, except a named player, who is hit even if dead.
+  - Random targets are re-rolled each time the step runs, so ×30 means 30 rolls.
+- **One action, one table event:** a tap, macro or toggle (repeats and triggers included) nets its life changes per player and sends them to the table as one action. The dash event keeps those ops, so **dash undo sends the reverse** as a new table action instead of using the table's undo (which might belong to someone else). Redo sends them again.
+- **No table:** table steps are skipped with a note, and the rest of the macro runs. A missing named player is reported.
+- **Damage tile:**
+  - It's a sheet of signed life changes: Random opponent and Random player rows (−10 −1 +1 +10), then each seat (− / + beside the number, ±10 and ±100 below).
+  - Done runs them as `#life` steps.
+  - While recording, it adds those steps to the macro: seats are recorded by name, and your own seat as `#me`.
+- **Repeat:** hold any macro and pick Repeat… to set a count. The macro's "Repeat by default" setting makes a tap ask for one.
+- **No end-of-action damage pool** (decided against).
+
+## Phase 4 (original design)
 
 - **Damage allocation (B):** when the dash loses life (a counter flagged as "life"), a splash asks
   "Allocate damage to… [name] [name] … [Other (does nothing)]" and submits a `life` op for the chosen player.

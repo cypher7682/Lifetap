@@ -381,8 +381,36 @@ export function nextMacroName(s) {
 
 // ---------------------------------------------------------------- refs & steps
 
+// Table steps: `#life#<who>` changes a player's life at the table you're at.
+// Who is picked each time the step runs, so a random target is re-rolled on every repeat.
+export const TABLE_WHO = ["opponents", "opponentRandom", "playerRandom", "me", "all"];
+export const tableRef = (who, name) => (who === "name" ? { kind: "table", stat: "life", who, name } : { kind: "table", stat: "life", who });
+
+/**
+ * Which seats a table ref hits right now. table: {me, seats: [{id, name, dead}], rand}.
+ * Living players only, except a named player, who is hit even if dead. Returns [] if nobody fits.
+ */
+export function tableTargets(table, ref) {
+  const alive = table.seats.filter((p) => !p.dead);
+  const opps = alive.filter((p) => p.id !== table.me);
+  const pick = (list) => (list.length ? [list[Math.floor(table.rand() * list.length)]] : []);
+  switch (ref.who) {
+    case "opponents": return opps;
+    case "opponentRandom": return pick(opps);
+    case "playerRandom": return pick(alive);
+    case "me": return table.seats.filter((p) => p.id === table.me);
+    case "all": return alive;
+    case "name": {
+      const n = String(ref.name || "").toLowerCase();
+      return table.seats.filter((p) => p.name.toLowerCase() === n).slice(0, 1);
+    }
+  }
+  return [];
+}
+
 export function refBroken(s, macro, ref) {
   if (!ref || typeof ref !== "object") return false;
+  if (ref.kind === "table") return false; // resolved against the table when it runs
   if (ref.kind === "tile") return !findTile(s, ref.tileId);
   if (ref.kind === "toggle") return !findToggle(s, ref.toggleId);
   if (ref.kind === "dvar") return !findDashVar(s, ref.varId);
@@ -397,6 +425,7 @@ export function stepBroken(s, macro, step) {
 export function refLabel(s, ref) {
   if (!ref) return "?";
   if (ref.kind === "var") return "$" + ref.name;
+  if (ref.kind === "table") return "#life#" + (ref.who === "name" ? ref.name : ref.who);
   if (ref.kind === "dvar") {
     const v = findDashVar(s, ref.varId);
     return v ? "@" + v.name : "Var removed";
@@ -454,8 +483,12 @@ class TriggerLoop {}
  * run is rejected: changes is empty and blocked = { tileId, name, value }.
  * If triggers run more than MAX_TRIGGER_RUNS times, loop is true and nothing changes.
  */
-export function runMacro(s, macro, times = 1) {
+export function runMacro(s, macro, times = 1, table = null) {
   const ctx = {
+    table,
+    tableOps: [],
+    tableSkipped: 0,
+    missing: new Set(),
     values: holderValues(s),
     tiles: new Map(counters(s).map((t) => [t.id, t])),
     toggleObjs: new Map(toggles(s).map((t) => [t.id, t])),
@@ -468,7 +501,7 @@ export function runMacro(s, macro, times = 1) {
   const before = new Map(ctx.values);
   const result = (extra) => ({
     changes: [], skippedBroken: ctx.broken.size, divByZero: ctx.divByZero, blocked: null, loop: false,
-    skippedTriggers: ctx.skippedTriggers, ...extra,
+    skippedTriggers: ctx.skippedTriggers, tableOps: [], tableSkipped: ctx.tableSkipped, missing: [...ctx.missing], ...extra,
   });
   try {
     for (let run = 0; run < times; run++) execSteps(ctx, macro, null);
@@ -482,7 +515,11 @@ export function runMacro(s, macro, times = 1) {
     const to = ctx.values.get(id);
     if (to !== from) changes.push({ tileId: id, from, to });
   }
-  return result({ changes });
+  // net life change per player, in the order they were first hit
+  const net = new Map();
+  for (const o of ctx.tableOps) net.set(o.p, (net.get(o.p) || 0) + o.d);
+  const tableOps = [...net].filter(([, d]) => d).map(([p, d]) => ({ p, d }));
+  return result({ changes, tableOps });
 }
 
 /** One run of a step list. `change` is the built-in $change for triggers (null for macros). */
@@ -494,6 +531,16 @@ function execSteps(ctx, macro, change) {
 
   for (const step of macro.steps) {
     const literal = typeof step.value === "number";
+    if (step.target && step.target.kind === "table") {
+      if (!literal && !has(step.value)) { ctx.broken.add(step); continue; }
+      if (!ctx.table) { ctx.tableSkipped++; continue; }
+      if (step.op !== "+" && step.op !== "-") { ctx.broken.add(step); continue; }
+      const v = literal ? toInt(step.value) : read(step.value);
+      const hit = tableTargets(ctx.table, step.target);
+      if (!hit.length && step.target.who === "name") ctx.missing.add(step.target.name);
+      for (const p of hit) ctx.tableOps.push({ p: p.id, d: step.op === "+" ? v : -v });
+      continue;
+    }
     if (!has(step.target) || (!literal && !has(step.value))) {
       ctx.broken.add(step);
       continue;
@@ -527,6 +574,7 @@ function fireTriggers(ctx, tile, prev, next) {
     const size = Math.abs(delta);
     const runs = tr.perPoint ? size : 1;
     const snap = new Map(ctx.values);
+    const opsLen = ctx.tableOps.length;
     try {
       for (let k = 0; k < runs; k++) {
         if (++ctx.triggerRuns > MAX_TRIGGER_RUNS) throw new TriggerLoop();
@@ -536,27 +584,33 @@ function fireTriggers(ctx, tile, prev, next) {
       if (!(e instanceof Blocked)) throw e;
       ctx.values.clear();
       for (const [k, val] of snap) ctx.values.set(k, val);
+      ctx.tableOps.length = opsLen;
       ctx.skippedTriggers.push({ tile: tile.name, blocked: e.info });
     }
   }
 }
 
 /** A +/− on one tile, run through the macro engine so its triggers fire. */
-export function tapAction(s, tile, delta) {
+export function tapAction(s, tile, delta, table = null) {
   const mac = { vars: [], steps: [{ target: { kind: "tile", tileId: tile.id }, op: delta > 0 ? "+" : "-", value: Math.abs(delta) }] };
-  const r = runMacro(s, mac, 1);
+  const r = runMacro(s, mac, 1, table);
   const sign = delta > 0 ? "+" : "−";
-  return { ...r, event: makeEvent(Math.abs(delta) === 1 ? "tap" : "bulk", `${tile.name} ${sign}${Math.abs(delta)}`, r.changes) };
+  return { ...r, event: withTable(makeEvent(Math.abs(delta) === 1 ? "tap" : "bulk", `${tile.name} ${sign}${Math.abs(delta)}`, r.changes), table, r) };
+}
+
+/** Attach the table life changes an action made, so dash undo can send the reverse. */
+function withTable(ev, table, r) {
+  return table && r.tableOps.length ? { ...ev, table: { id: table.id, ops: r.tableOps } } : ev;
 }
 
 export const TRIGGER_WHEN = { down: "goes down", up: "goes up", change: "changes" };
 export const TOGGLE_TRIGGER_WHEN = { down: "turns off", up: "turns on", change: "changes" };
 
 /** Flip a toggle, run through the macro engine so its triggers fire. */
-export function toggleAction(s, t) {
+export function toggleAction(s, t, table = null) {
   const to = t.value ? 0 : 1;
-  const r = runMacro(s, { vars: [], steps: [{ target: { kind: "toggle", toggleId: t.id }, op: "=", value: to }] }, 1);
-  return { ...r, event: makeEvent("tap", `${t.name} ${to ? "on" : "off"}`, r.changes) };
+  const r = runMacro(s, { vars: [], steps: [{ target: { kind: "toggle", toggleId: t.id }, op: "=", value: to }] }, 1, table);
+  return { ...r, event: withTable(makeEvent("tap", `${t.name} ${to ? "on" : "off"}`, r.changes), table, r) };
 }
 
 export function newTrigger(when = "down") {
@@ -579,7 +633,7 @@ export function blockedMessage(b) {
  * left out, since the triggers will fire again when the macro runs.
  * direct: { tileId: net delta }, toggled: { toggleId: final 0/1 }, start: values when recording began.
  */
-export function recordingSteps(s, direct, toggled = {}, start = {}) {
+export function recordingSteps(s, direct, toggled = {}, start = {}, table = {}) {
   const steps = [];
   for (const t of counters(s)) {
     const d = direct[t.id] || 0;
@@ -587,6 +641,12 @@ export function recordingSteps(s, direct, toggled = {}, start = {}) {
   }
   for (const t of toggles(s)) {
     if (t.id in toggled && toggled[t.id] !== start[t.id]) steps.push({ target: { kind: "toggle", toggleId: t.id }, op: "=", value: toggled[t.id] });
+  }
+  // Damage tile use while recording. table: {key: net life change}, key "me" / "opponentRandom" / "name:Dave" …
+  for (const [key, d] of Object.entries(table)) {
+    if (!d) continue;
+    const ref = key.startsWith("name:") ? tableRef("name", key.slice(5)) : tableRef(key);
+    steps.push({ target: ref, op: d > 0 ? "+" : "-", value: Math.abs(d) });
   }
   return steps;
 }
@@ -638,7 +698,7 @@ export function makeEvent(kind, label, changes) {
 
 /** Apply a new event: write values, append to the log, clear redo. */
 export function commitEvent(dash, ev) {
-  if (!ev.changes.length) return dash;
+  if (!ev.changes.length && !ev.table) return dash;
   const next = withValues(dash, eventMap(ev, "redo"));
   const log = [...dash.log, ev];
   if (log.length > LOG_LIMIT) log.splice(0, log.length - LOG_LIMIT);
@@ -669,9 +729,9 @@ export function toggleEvent(t) {
   return makeEvent("tap", `${t.name} ${to ? "on" : "off"}`, [{ tileId: t.id, from: t.value ? 1 : 0, to }]);
 }
 
-export function macroEvent(s, macro, times) {
-  const r = runMacro(s, macro, times);
-  const ev = makeEvent("macro", times > 1 ? `${macro.name} ×${times}` : macro.name, r.changes);
+export function macroEvent(s, macro, times, table = null) {
+  const r = runMacro(s, macro, times, table);
+  const ev = withTable(makeEvent("macro", times > 1 ? `${macro.name} ×${times}` : macro.name, r.changes), table, r);
   return { ...r, event: ev };
 }
 

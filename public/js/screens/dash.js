@@ -8,6 +8,7 @@ import { VarSheet } from "./editor.js";
 import * as tables from "../tablestore.js";
 import { ViewSwitch } from "../viewswitch.js";
 import { DamageTile, DamageSheet } from "./damage.js";
+import { tableContext, sendLife, describeLife } from "../tablelink.js";
 
 // Edit mode survives a trip to the step editor and back.
 const session = new Map();
@@ -538,8 +539,9 @@ export function DashScreen({ id, nav, autoTurn }) {
   };
 
   const commit = (ev) => {
-    if (!ev.changes.length) return;
+    if (!ev.changes.length && !ev.table) return;
     store.update(id, (d) => E.commitEvent(d, ev));
+    if (ev.table) sendLife(ev.table.id, ev.table.ops);
     bumpBadges(ev.changes);
     if (recRef.current) setRec((r) => ({ ...r, taps: r.taps + 1 }));
   };
@@ -558,19 +560,21 @@ export function DashScreen({ id, nav, autoTurn }) {
     for (const t of r.skippedTriggers) warn.push(`skipped a ${t.tile} trigger (would take ${t.blocked.name} to −${Math.abs(t.blocked.value)})`);
     if (r.skippedBroken) warn.push(`skipped ${r.skippedBroken} broken step${r.skippedBroken === 1 ? "" : "s"}`);
     if (r.divByZero) warn.push("skipped a divide by zero");
+    if (r.tableSkipped) warn.push(`skipped ${r.tableSkipped} #table step${r.tableSkipped === 1 ? "" : "s"} (not at a table)`);
+    for (const n of r.missing || []) warn.push(`#${n} isn't at this table`);
     if (warn.length) toast(`${name}: ${warn.join(", ")}`);
     return true;
   };
 
   const step = (tile, delta) => {
-    const r = E.tapAction(E.view(store.get(id)), tile, delta);
+    const r = E.tapAction(E.view(store.get(id)), tile, delta, tableContext());
     if (!report(r, tile.name)) return;
     commit(r.event);
     if (recRef.current) setRec((rr) => ({ ...rr, direct: { ...rr.direct, [tile.id]: (rr.direct[tile.id] || 0) + delta } }));
   };
 
   const flip = (t) => {
-    const r = E.toggleAction(E.view(store.get(id)), t);
+    const r = E.toggleAction(E.view(store.get(id)), t, tableContext());
     if (!report(r, t.name)) return;
     commit(r.event);
     if (recRef.current) setRec((rr) => ({ ...rr, toggled: { ...rr.toggled, [t.id]: t.value ? 0 : 1 } }));
@@ -580,10 +584,32 @@ export function DashScreen({ id, nav, autoTurn }) {
     const s = E.view(store.get(id));
     const m = E.findMacro(s, macroId);
     if (!m) return;
-    const r = E.macroEvent(s, m, times);
+    const r = E.macroEvent(s, m, times, tableContext());
     if (!report(r, m.name)) return;
     commit(r.event);
-    if (!r.changes.length && !r.skippedBroken && !r.divByZero) toast(m.steps.length ? `${m.name}: nothing changed` : `${m.name} has no steps yet`);
+    if (r.tableOps.length && !r.changes.length) toast(`${m.name}: ${describeLife(r.event.table.id, r.tableOps)}`);
+    else if (!r.changes.length && !r.tableOps.length && !r.skippedBroken && !r.divByZero && !r.tableSkipped && !(r.missing || []).length) toast(m.steps.length ? `${m.name}: nothing changed` : `${m.name} has no steps yet`);
+  };
+
+  /** Damage tile: [{key, d}] with key "me" / "opponentRandom" / "playerRandom" / "name:Dave", d = life change. */
+  const dealDamage = (alloc) => {
+    const ctx = tableContext();
+    if (!ctx) return toast("Start or join a table first");
+    const steps = alloc.map(({ key, d }) => ({
+      target: key.startsWith("name:") ? E.tableRef("name", key.slice(5)) : E.tableRef(key), op: d > 0 ? "+" : "-", value: Math.abs(d),
+    }));
+    const r = E.runMacro(E.view(store.get(id)), { vars: [], steps }, 1, ctx);
+    if (r.tableOps.length) {
+      sendLife(ctx.id, r.tableOps);
+      toast(describeLife(ctx.id, r.tableOps));
+    }
+    if (recRef.current) {
+      setRec((rr) => {
+        const table = { ...rr.table };
+        for (const { key, d } of alloc) table[key] = (table[key] || 0) + d;
+        return { ...rr, table, taps: rr.taps + 1 };
+      });
+    }
   };
 
   const tapMacro = (macroId) => {
@@ -597,12 +623,14 @@ export function DashScreen({ id, nav, autoTurn }) {
     const ev = dash.log[dash.log.length - 1];
     if (!ev) return;
     store.update(id, E.undo);
+    if (ev.table) sendLife(ev.table.id, ev.table.ops.map((o) => ({ p: o.p, d: -o.d })));
     toast(`Undid ${ev.label}`);
   };
   const doRedo = () => {
     const ev = dash.redo[dash.redo.length - 1];
     if (!ev) return;
     store.update(id, E.redo);
+    if (ev.table) sendLife(ev.table.id, ev.table.ops);
     toast(`Redid ${ev.label}`);
   };
 
@@ -618,7 +646,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     const start = Object.fromEntries(E.holderValues(s));
     setMode("play");
     setBadges({});
-    setRec({ target, start, direct: {}, toggled: {}, logLen: d.log.length, redo: d.redo, taps: 0 });
+    setRec({ target, start, direct: {}, toggled: {}, table: {}, logLen: d.log.length, redo: d.redo, taps: 0 });
     setFlash((f) => f + 1);
   };
 
@@ -627,7 +655,7 @@ export function DashScreen({ id, nav, autoTurn }) {
     if (!r) return;
     const d = store.get(id);
     const s = E.view(d);
-    const steps = E.recordingSteps(s, r.direct, r.toggled, r.start);
+    const steps = E.recordingSteps(s, r.direct, r.toggled, r.start, r.table);
     setRec(null);
     setFlash((f) => f + 1);
     if (!steps.length) {
@@ -882,7 +910,11 @@ export function DashScreen({ id, nav, autoTurn }) {
         ${(pending || !liveTable) && html`
         <button class=${"btn btn-save" + (pending ? " on" : "")} disabled=${!pending} aria-label=${pending ? "Save changes" : "Nothing to save"} onClick=${save}>
           <${Icon} name="save" size=${18} style=${turn ? { transform: `rotate(${turn}deg)` } : null} />Save</button>`}
-        ${liveTable && html`<${ViewSwitch} view="counters" onSwitch=${() => nav.replace({ name: "table", id: liveTable.id })} />`}
+        ${liveTable && html`<${ViewSwitch} view="counters" onSwitch=${() => {
+          // coming from a dash makes it "your" dash for ++, unless you've picked one
+          if (!liveTable.myDash || !store.get(liveTable.myDash)) tables.update(liveTable.id, (t) => ({ ...t, myDash: id }));
+          nav.replace({ name: "table", id: liveTable.id });
+        }} />`}
       </header>`;
 
   const { cols, rows } = v.grid;
@@ -915,7 +947,8 @@ export function DashScreen({ id, nav, autoTurn }) {
       if (m) sheetEl = html`
         <${Popover} anchor=${sheet.anchor} onClose=${close}>
           <div class="pop-title">${m.name}</div>
-          <div class="pop-sub">${m.steps.length} step${m.steps.length === 1 ? "" : "s"} · ${m.repeats ? "repeats" : "runs once"}</div>
+          <div class="pop-sub">${m.steps.length} step${m.steps.length === 1 ? "" : "s"} · ${m.repeats ? "asks how many times" : "tap runs once"}</div>
+          <${MenuItem} icon="reset" label="Repeat…" onClick=${() => setSheet({ type: "howmany", kind: "macro", macroId: m.id })} />
           <${MenuItem} dot label="Record" onClick=${() => startRecording({ macroId: m.id })} />
           <${MenuItem} icon="pencil" label="Edit" onClick=${() => { close(); nav.push({ name: "macro", id, macroId: m.id }); }} />
           <${MenuItem} icon="trash" label="Delete" kind="danger" onClick=${() => deleteMacro(m.id)} />
@@ -989,7 +1022,7 @@ export function DashScreen({ id, nav, autoTurn }) {
         }}
         onDeleteTrigger=${(toggleId, triggerId) => editWithUndo("Deleted trigger", (st) => setToggleTriggers(st, toggleId, (trs) => trs.filter((x) => x.id !== triggerId)))} />`;
     } else if (sheet.type === "damage") {
-      sheetEl = html`<${DamageSheet} turn=${turn} onClose=${close} />`;
+      sheetEl = html`<${DamageSheet} turn=${turn} onClose=${close} onDone=${(alloc) => { close(); dealDamage(alloc); }} />`;
     } else if (sheet.type === "damagecell") {
       sheetEl = html`
         <${Sheet} onClose=${close} label="Damage tile">

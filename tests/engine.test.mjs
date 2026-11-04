@@ -453,3 +453,69 @@ test("custom grids: any size within limits, tiles never deleted", () => {
   assert.equal(E.counters(r.structure).length, 7);
   assert.equal(E.MAX_COUNTERS, 96);
 });
+
+// ---------------------------------------------------------------- table steps
+
+const seats = [{ id: "me", name: "Tim", dead: false }, { id: "d", name: "Dave", dead: false }, { id: "a", name: "Alex", dead: false }, { id: "x", name: "Sam", dead: true }];
+const table = (rand = () => 0) => ({ id: "tbl", me: "me", seats, rand });
+const life = (who, op, value, name) => ({ target: E.tableRef(who, name), op, value });
+
+test("table steps: who each selector hits (living only, except a named player)", () => {
+  const ids = (who, name, r) => E.tableTargets(table(r), E.tableRef(who, name)).map((p) => p.id);
+  assert.deepEqual(ids("opponents"), ["d", "a"]);
+  assert.deepEqual(ids("all"), ["me", "d", "a"]);
+  assert.deepEqual(ids("me"), ["me"]);
+  assert.deepEqual(ids("opponentRandom", null, () => 0.99), ["a"]);
+  assert.deepEqual(ids("playerRandom", null, () => 0), ["me"]);
+  assert.deepEqual(ids("name", "dave"), ["d"]);
+  assert.deepEqual(ids("name", "Sam"), ["x"]);
+  assert.equal(E.refLabel(null, E.tableRef("name", "Dave")), "#life#Dave");
+  assert.equal(E.refLabel(null, E.tableRef("opponentRandom")), "#life#opponentRandom");
+});
+
+test("table steps: random re-rolls every repeat; ops net per player; dash values untouched", () => {
+  const d = E.createDash({ name: "t", count: 1, grid: { cols: 2, rows: 2 } });
+  const s = E.view(d);
+  const rolls = [0, 0.99, 0.99, 0];
+  let i = 0;
+  const m = { vars: [], steps: [life("opponentRandom", "-", 1), life("me", "+", 1)] };
+  const r = E.runMacro(s, m, 4, { ...table(), rand: () => rolls[i++] });
+  assert.deepEqual(r.tableOps, [{ p: "d", d: -2 }, { p: "me", d: 4 }, { p: "a", d: -2 }]);
+  assert.equal(r.changes.length, 0);
+});
+
+test("table steps: skipped without a table, missing names reported, a value can be a variable", () => {
+  const d = E.createDash({ name: "t", count: 1, grid: { cols: 2, rows: 2 } });
+  const s = E.view(d);
+  const tid = E.counters(s)[0].id;
+  const m = { vars: [{ name: "n", initial: 3 }], steps: [life("opponents", "-", v("n")), life("name", "-", 1, "Zed"), { target: tile(tid), op: "+", value: 1 }] };
+  const off = E.runMacro(s, m, 1, null);
+  assert.equal(off.tableSkipped, 2);
+  assert.equal(off.changes.length, 1, "the rest of the macro still runs");
+  const on = E.runMacro(s, m, 1, table());
+  assert.deepEqual(on.tableOps, [{ p: "d", d: -3 }, { p: "a", d: -3 }]);
+  assert.deepEqual(on.missing, ["Zed"]);
+});
+
+test("table steps in a trigger fire per point, and roll back with a failed trigger", () => {
+  const d = E.createDash({ name: "t", count: 2, grid: { cols: 2, rows: 2 } });
+  let s = E.view(d);
+  const [tok, guard] = E.counters(s);
+  // Blood Artist-ish: each token lost drains a random opponent
+  s = E.updateCell(s, 0, { value: 3, triggers: [{ id: "t", when: "down", perPoint: true, vars: [], steps: [life("opponentRandom", "-", 1)] }] });
+  const r = E.tapAction(s, E.counters(s)[0], -3, table(() => 0));
+  assert.deepEqual(r.tableOps, [{ p: "d", d: -3 }]);
+  assert.deepEqual(r.event.table, { id: "tbl", ops: [{ p: "d", d: -3 }] });
+  // a trigger that also takes a no-negatives tile below zero is rolled back, table damage and all
+  s = E.updateCell(s, 1, { value: 0, allowNegative: false });
+  s = E.updateCell(s, 0, { triggers: [{ id: "t", when: "down", perPoint: false, vars: [], steps: [life("opponents", "-", 5), { target: tile(guard.id), op: "-", value: 1 }] }] });
+  const r2 = E.tapAction(s, E.counters(s)[0], -1, table());
+  assert.deepEqual(r2.tableOps, []);
+  assert.equal(r2.skippedTriggers.length, 1);
+});
+
+test("recording the damage tile gives #life steps", () => {
+  const d = E.createDash({ name: "t", count: 1, grid: { cols: 2, rows: 2 } });
+  const steps = E.recordingSteps(E.view(d), {}, {}, {}, { "name:Dave": -2, me: 1, opponentRandom: -1, playerRandom: 0 });
+  assert.deepEqual(steps.map((x) => `${E.refLabel(null, x.target)} ${x.op} ${x.value}`), ["#life#Dave - 2", "#life#me + 1", "#life#opponentRandom - 1"]);
+});

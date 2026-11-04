@@ -4,15 +4,19 @@ import * as E from "../engine.js";
 import { Icon } from "../icons.js";
 import { Sheet, Segmented, IntInput, confirm, snack, toast } from "../ui.js";
 import { IconPicker } from "./pickers.js";
+import * as tables from "../tablestore.js";
+import * as T from "../table.js";
 
 const VAR_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const withKeys = (m) => ({ ...m, vars: m.vars.map((x) => ({ ...x })), steps: m.steps.map((s) => ({ ...s, _k: E.uid() })) });
 const stripKeys = (m) => ({ ...m, steps: m.steps.map(({ _k, ...s }) => s) });
 const refKey = (r) =>
-  r.kind === "tile" ? "t:" + r.tileId : r.kind === "toggle" ? "g:" + r.toggleId : r.kind === "dvar" ? "d:" + r.varId : "v:" + r.name;
+  r.kind === "tile" ? "t:" + r.tileId : r.kind === "toggle" ? "g:" + r.toggleId : r.kind === "dvar" ? "d:" + r.varId
+    : r.kind === "table" ? "b:" + (r.who === "name" ? "name:" + r.name : r.who) : "v:" + r.name;
 function keyRef(k) {
   const v = k.slice(2);
+  if (k.startsWith("b:")) return v.startsWith("name:") ? E.tableRef("name", v.slice(5)) : E.tableRef(v);
   if (k.startsWith("t:")) return { kind: "tile", tileId: v };
   if (k.startsWith("g:")) return { kind: "toggle", toggleId: v };
   if (k.startsWith("d:")) return { kind: "dvar", varId: v };
@@ -32,21 +36,34 @@ function RefOptions({ s, vars }) {
     ${vars.length > 0 && html`<optgroup label="Macro variables">${vars.map((x) => html`<option value=${"v:" + x.name}>$${x.name}</option>`)}</optgroup>`}`;
 }
 
+/** #life targets: the fixed selectors, then everyone at your table now, plus any name already used here. */
+function TableOptions({ current }) {
+  const t = tables.current();
+  const names = t ? T.state(t).seats.filter((p) => p.id !== t.me).map((p) => p.name) : [];
+  if (current && current.kind === "table" && current.who === "name" && !names.includes(current.name)) names.push(current.name);
+  return html`
+    <optgroup label="Table life (#)">
+      ${E.TABLE_WHO.map((w) => html`<option value=${"b:" + w}>#life#${w}</option>`)}
+      ${names.map((n) => html`<option value=${"b:name:" + n}>#life#${n}</option>`)}
+    </optgroup>`;
+}
+
 function TargetSelect({ s, macro, step, onChange }) {
   const broken = E.refBroken(s, macro, step.target);
   const isVar = isVarRef(step.target);
   return html`
-    <div class=${"sel" + (isVar ? " is-var" : "") + (step.target.kind === "dvar" ? " is-dvar" : "") + (broken ? " broken" : "")}>
+    <div class=${"sel" + (isVar ? " is-var" : "") + (step.target.kind === "dvar" ? " is-dvar" : "") + (step.target.kind === "table" ? " is-table" : "") + (broken ? " broken" : "")}>
       <span class="sel-label">${broken ? removedLabel(step.target) : E.refLabel(s, step.target)}</span>
       <${Icon} name="updown" size=${16} />
       <select aria-label="Target" value=${broken ? "" : refKey(step.target)} onChange=${(e) => onChange(keyRef(e.currentTarget.value))}>
         ${broken && html`<option value="" disabled>${removedLabel(step.target)}</option>`}
         <${RefOptions} s=${s} vars=${varsFor(macro)} />
+        <${TableOptions} current=${step.target} />
       </select>
     </div>`;
 }
 
-function OpSelect({ op, onChange }) {
+function OpSelect({ op, onChange, lifeOnly = false }) {
   return html`
     <div class=${"sel op-sel " + (op === "=" ? "op-set" : "op-arith")}>
       <span class="op-glyph">${E.OP_GLYPH[op]}</span>
@@ -54,9 +71,10 @@ function OpSelect({ op, onChange }) {
       <select aria-label="Action" value=${op} onChange=${(e) => onChange(e.currentTarget.value)}>
         <option value="+">+ add</option>
         <option value="-">− take</option>
+        ${!lifeOnly && html`
         <option value="*">× multiply</option>
         <option value="/">÷ divide</option>
-        <option value="=">= set</option>
+        <option value="=">= set</option>`}
       </select>
     </div>`;
 }
@@ -281,9 +299,9 @@ export function MacroEditor({ id, macroId, tileId, triggerId, nav }) {
             </div>
           </div>
 
-          <div class="field-label">Repeats</div>
-          <${Segmented} label="Repeats" value=${m.repeats} options=${[{ value: false, label: "No" }, { value: true, label: "Yes" }]} onChange=${(r) => set({ repeats: r })} />
-          <p class="hint">‘Yes’ will ask you how many times to run when you run it.</p>
+          <div class="field-label">Repeat by default</div>
+          <${Segmented} label="Repeat by default" value=${m.repeats} options=${[{ value: false, label: "No" }, { value: true, label: "Yes" }]} onChange=${(r) => set({ repeats: r })} />
+          <p class="hint">‘Yes’: tapping it asks how many times to run. Either way, hold it and pick Repeat… to run it a set number of times.</p>
         `}
 
         <div class="field-label">${isTrigger ? "Variables · reset every run" : "Macro variables · reset every run"}</div>
@@ -315,8 +333,9 @@ export function MacroEditor({ id, macroId, tileId, triggerId, nav }) {
                       steps.splice(k, 0, it);
                       set({ steps });
                     }}>${i + 1}</button>
-                  <${TargetSelect} s=${s} macro=${m} step=${st} onChange=${(target) => setStep(i, { target })} />
-                  <${OpSelect} op=${st.op} onChange=${(op) => setStep(i, { op })} />
+                  <${TargetSelect} s=${s} macro=${m} step=${st}
+                    onChange=${(target) => setStep(i, target.kind === "table" && st.op !== "+" && st.op !== "-" ? { target, op: "-" } : { target })} />
+                  <${OpSelect} op=${st.op} lifeOnly=${st.target.kind === "table"} onChange=${(op) => setStep(i, { op })} />
                   <${ValueBox} s=${s} macro=${m} step=${st} onChange=${(value) => setStep(i, { value })} />
                   <button class="step-del" aria-label=${`Delete step ${i + 1}`} onClick=${() => delStep(i)}><${Icon} name="x" size=${20} /></button>
                 </div>
