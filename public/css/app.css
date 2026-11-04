@@ -1033,21 +1033,16 @@ h1, h2, p { margin: 0; }
 .pc-counter { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-counter b { color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
 
-/* Table Counter tile on the dash */
+/* Table Counter tile on the dash: name, then a little copy of the table with each count */
 .tcounter-tile { border-color: rgba(184, 107, 224, .35); }
-.tcn-btn { width: 100%; align-items: stretch; gap: 6px; padding: 8px; }
+.tcn-btn { width: 100%; align-items: stretch; gap: 8px; padding: 10px 10px 12px; }
 .tcn-btn:active { background: rgba(184, 107, 224, .08); }
-.tcn-head { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--purple); font-size: min(15px, 12cqh); font-weight: 620; min-width: 0; }
+.tcn-head { display: flex; align-items: center; gap: 6px; color: var(--purple); font-size: min(15px, 12cqh); font-weight: 620; min-width: 0; }
 .tcn-head span { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tcn-map { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-.tcn-cell { min-width: 0; min-height: 0; display: grid; place-items: center; border-radius: 6px; background: var(--surface-2); border-left: 3px solid currentColor; container-type: size; overflow: hidden; }
-.tcn-cell.self { background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); }
-.tcn-cell b { color: var(--text); font-size: clamp(9px, 60cqmin, 22px); font-weight: 650; font-variant-numeric: tabular-nums; }
+.tcn-map { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 4px; }
+.tcn-cell { min-width: 0; min-height: 0; display: grid; place-items: center; border-radius: 8px; background: var(--surface-2); border: 1.5px solid #4a4f5a; container-type: size; overflow: hidden; }
+.tcn-cell.self { background: #2a2d34; border-color: #3a3e48; transform: scale(.86); }
+.tcn-cell.self b { color: var(--muted); }
+.tcn-cell b { color: var(--text); font-size: clamp(10px, 56cqmin, 26px); font-weight: 650; font-variant-numeric: tabular-nums; }
 .choice-tcounter .ic { color: var(--purple); }
 .dmg-now { color: var(--muted); font-weight: 500; font-size: 12px; margin-left: 4px; font-variant-numeric: tabular-nums; }
-.tcn-local { align-items: center; justify-content: space-between; padding: 10px; }
-.tcn-val { flex: 1; min-height: 0; display: grid; place-items: center; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.035em; line-height: 1;
-  font-size: min(34cqh, calc(80cqw / (var(--len) * .62)), 84px); }
-.tcn-pms { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
-.tcn-pms .pm { height: min(52px, 22cqh); min-height: 36px; }
-.tcn-pms .pm:disabled { opacity: .35; }

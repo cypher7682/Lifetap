@@ -619,13 +619,16 @@ export function DashScreen({ id, nav, autoTurn }) {
    * Runs them as #table steps, so random picks and recording work the same as macros.
    */
   const dealDamage = (alloc) => {
-    const ctx = tableContext();
-    if (!ctx) return toast("Start or join a table first");
+    const ctx = tableContext(); // null away from a table: then counter steps change the tile's own count
     const steps = alloc.map(({ key, d }) => ({ target: E.keyTableRef(key), op: d > 0 ? "+" : "-", value: Math.abs(d) }));
     const r = E.runMacro(E.view(store.get(id)), { vars: [], steps }, 1, ctx);
-    if (r.tableOps.length) {
+    if (ctx && r.tableOps.length) {
       sendLife(ctx.id, r.tableOps);
       toast(describeLife(ctx.id, r.tableOps));
+    }
+    if (r.changes.length) {
+      const label = alloc.map(({ key, d }) => `${E.refLabel(null, E.keyTableRef(key))} ${d > 0 ? "+" : "−"}${Math.abs(d)}`).join(", ");
+      commit(E.makeEvent("tap", label, r.changes));
     }
     if (recRef.current) {
       setRec((rr) => {
@@ -633,16 +636,6 @@ export function DashScreen({ id, nav, autoTurn }) {
         for (const { key, d } of alloc) table[key] = (table[key] || 0) + d;
         return { ...rr, table, taps: rr.taps + 1 };
       });
-    }
-  };
-
-  /** Table counter tile away from a table: your own count, through the engine like any tap. */
-  const localCounter = (cell, d) => {
-    const r = E.runMacro(E.view(store.get(id)), { vars: [], steps: [{ target: E.tableRef("me", undefined, cell.name), op: d > 0 ? "+" : "-", value: Math.abs(d) }] }, 1, null);
-    commit(E.makeEvent("tap", `${cell.name} ${d > 0 ? "+" : "−"}${Math.abs(d)}`, r.changes));
-    if (recRef.current) {
-      const key = cell.name + "|me";
-      setRec((rr) => ({ ...rr, table: { ...rr.table, [key]: (rr.table[key] || 0) + d } }));
     }
   };
 
@@ -854,8 +847,7 @@ export function DashScreen({ id, nav, autoTurn }) {
         onOpen=${() => (tables.current() ? setSheet({ type: "damage" }) : toast("Start or join a table first (home screen)"))} />`;
     }
     if (cell.kind === "tcounter") {
-      return html`<${TableCounterTile} key=${cell.id} cell=${cell} turn=${turn}
-        onOpen=${() => setSheet({ type: "damage", stat: cell.name })} onStep=${(d) => localCounter(cell, d)} />`;
+      return html`<${TableCounterTile} key=${cell.id} cell=${cell} turn=${turn} onOpen=${() => setSheet({ type: "damage", stat: cell.name, cellId: cell.id })} />`;
     }
     const ms = E.cellMacroIds(cell).map((mid) => E.findMacro(v, mid)).filter(Boolean);
     if (!ms.length) return html`<div class="cell-empty" key=${"e" + i}></div>`;
@@ -1063,7 +1055,8 @@ export function DashScreen({ id, nav, autoTurn }) {
         }}
         onDeleteTrigger=${(toggleId, triggerId) => editWithUndo("Deleted trigger", (st) => setToggleTriggers(st, toggleId, (trs) => trs.filter((x) => x.id !== triggerId)))} />`;
     } else if (sheet.type === "damage") {
-      sheetEl = html`<${DamageSheet} turn=${turn} stat=${sheet.stat || "life"} onClose=${close} onDone=${(alloc) => { close(); dealDamage(alloc); }} />`;
+      const local = sheet.cellId ? v.cells.find((c) => c && c.id === sheet.cellId)?.value || 0 : 0;
+      sheetEl = html`<${DamageSheet} turn=${turn} stat=${sheet.stat || "life"} local=${local} onClose=${close} onDone=${(alloc) => { close(); dealDamage(alloc); }} />`;
     } else if (sheet.type === "tcountercell") {
       sheetEl = html`<${TableCounterCellSheet} dash=${dash} index=${sheet.index} onClose=${close} onRemove=${() => removeCell(sheet.index)} />`;
     } else if (sheet.type === "damagecell") {
